@@ -1,30 +1,38 @@
-import React, { createContext, useContext, useEffect, useState } from "react";
-import { auth, db } from "@/lib/firebase";
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { auth, db, firebaseConfig } from "@/lib/firebase";
+import { deleteApp, initializeApp } from "firebase/app";
 import {
-  onAuthStateChanged,
-  signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
+  getAuth,
+  onAuthStateChanged,
+  sendPasswordResetEmail,
+  signInWithEmailAndPassword,
   signOut,
   User,
 } from "firebase/auth";
-import { doc, getDoc, setDoc, getDocs, collection } from "firebase/firestore";
+import { doc, getDoc, setDoc } from "firebase/firestore";
+import { effectivePermissions, isSuperRole, Permission, presetFor } from "@/lib/permissions";
 
-export type UserRole =
-  | "admin"
-  | "manager"
-  | "accountant"
-  | "lead_manager"
-  | "assistant"
-  | "team_member";
+export type UserRole = string;
 
 export interface RoleDoc {
   uid: string;
   email: string;
   role: UserRole;
   workspaceUid: string; // admin uid that owns the data
-  teamId?: string; // for team_member, link to team collection
+  teamId?: string; // links the login to a Team record (My Portal)
+  /** Explicit permission list; when missing the role preset applies. */
+  permissions?: string[];
+  disabled?: boolean;
+  displayName?: string;
   createdAt?: number;
+  createdBy?: string;
+  updatedAt?: number;
+  updatedBy?: string;
 }
+
+/** Why a signed-in user may still be blocked from the portal. */
+export type AccessState = "ok" | "no_role" | "disabled" | "error";
 
 interface AuthContextType {
   user: User | null;
@@ -32,22 +40,23 @@ interface AuthContextType {
   roleDoc: RoleDoc | null;
   workspaceUid: string | null;
   loading: boolean;
+  access: AccessState;
   login: (email: string, password: string) => Promise<void>;
-  signup: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
-  createUserAccount: (
-    email: string,
-    password: string,
-    role: UserRole,
-    teamId?: string
-  ) => Promise<void>;
+  resetPassword: (email: string) => Promise<void>;
+  createUserAccount: (input: {
+    email: string;
+    password: string;
+    role: UserRole;
+    teamId?: string;
+    permissions?: string[];
+    displayName?: string;
+  }) => Promise<string>;
+  perms: Set<Permission>;
+  can: (p: Permission | Permission[]) => boolean;
   isAdmin: boolean;
-  isManager: boolean;
-  isAccountant: boolean;
-  isLeadManager: boolean;
-  isAssistant: boolean;
   isTeamMember: boolean;
-  hasFullAccess: boolean; // admin OR manager
+  hasFullAccess: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -58,67 +67,38 @@ export function useAuth() {
   return ctx;
 }
 
-async function fetchOrCreateRole(
-  uid: string,
-  email: string | null
-): Promise<RoleDoc> {
-  const ref = doc(db, "roles", uid);
-  const snap = await getDoc(ref);
-  if (snap.exists()) {
-    const data = snap.data() as RoleDoc;
-    // backfill workspaceUid for legacy admins
-    if (!data.workspaceUid) {
-      const fixed = { ...data, workspaceUid: data.role === "admin" ? uid : uid };
-      await setDoc(ref, fixed);
-      return fixed;
-    }
-    return data;
-  }
-  // No role doc: first signup ever => admin; otherwise default assistant under first admin's workspace
-  const allRoles = await getDocs(collection(db, "roles"));
-  const admins = allRoles.docs
-    .map((d) => d.data() as RoleDoc)
-    .filter((r) => r.role === "admin");
-  let newDoc: RoleDoc;
-  if (admins.length === 0) {
-    newDoc = {
-      uid,
-      email: email || "",
-      role: "admin",
-      workspaceUid: uid,
-      createdAt: Date.now(),
-    };
-  } else {
-    newDoc = {
-      uid,
-      email: email || "",
-      role: "assistant",
-      workspaceUid: admins[0].workspaceUid || admins[0].uid,
-      createdAt: Date.now(),
-    };
-  }
-  await setDoc(ref, newDoc);
-  return newDoc;
+// Role docs are created only by an admin (see createUserAccount). A login
+// without one gets no access — the old "auto-create assistant" path let anyone
+// who signed up read business data, and re-admitted removed users.
+async function fetchRole(uid: string): Promise<RoleDoc | null> {
+  const snap = await getDoc(doc(db, "roles", uid));
+  return snap.exists() ? (snap.data() as RoleDoc) : null;
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [roleDoc, setRoleDoc] = useState<RoleDoc | null>(null);
+  const [access, setAccess] = useState<AccessState>("ok");
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (u) => {
+      setLoading(true);
       setUser(u);
-      if (u) {
-        try {
-          const r = await fetchOrCreateRole(u.uid, u.email);
-          setRoleDoc(r);
-        } catch (e) {
-          console.error("Role fetch error", e);
-          setRoleDoc(null);
-        }
-      } else {
+      if (!u) {
         setRoleDoc(null);
+        setAccess("ok");
+        setLoading(false);
+        return;
+      }
+      try {
+        const r = await fetchRole(u.uid);
+        setRoleDoc(r);
+        setAccess(!r ? "no_role" : r.disabled ? "disabled" : "ok");
+      } catch (e) {
+        console.error("Role fetch error", e);
+        setRoleDoc(null);
+        setAccess("error");
       }
       setLoading(false);
     });
@@ -129,37 +109,50 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await signInWithEmailAndPassword(auth, email, password);
   };
 
-  const signup = async (email: string, password: string) => {
-    await createUserWithEmailAndPassword(auth, email, password);
-  };
-
   const logout = async () => {
     await signOut(auth);
   };
 
-  // Admin/Manager creates any user with role; new user inherits same workspaceUid
-  const createUserAccount = async (
-    email: string,
-    password: string,
-    newRole: UserRole,
-    teamId?: string
-  ) => {
-    const wsUid = roleDoc?.workspaceUid || user?.uid;
-    if (!wsUid) throw new Error("No workspace");
-    const cred = await createUserWithEmailAndPassword(auth, email, password);
-    const newRoleDoc: RoleDoc = {
-      uid: cred.user.uid,
-      email,
-      role: newRole,
-      workspaceUid: wsUid,
-      teamId: teamId || undefined,
-      createdAt: Date.now(),
-    };
-    await setDoc(doc(db, "roles", cred.user.uid), newRoleDoc);
+  const resetPassword = async (email: string) => {
+    await sendPasswordResetEmail(auth, email);
   };
 
+  // Creates the Firebase Auth account on a throwaway secondary app so the
+  // admin stays signed in, then writes the role doc as the admin (the rules
+  // only let users.manage holders write role docs).
+  const createUserAccount: AuthContextType["createUserAccount"] = async (input) => {
+    const wsUid = roleDoc?.workspaceUid;
+    if (!wsUid || !user) throw new Error("No workspace");
+    const secondary = initializeApp(firebaseConfig, `create-user-${Date.now()}`);
+    try {
+      const cred = await createUserWithEmailAndPassword(getAuth(secondary), input.email, input.password);
+      const newRoleDoc: RoleDoc = {
+        uid: cred.user.uid,
+        email: input.email,
+        role: input.role,
+        workspaceUid: wsUid,
+        permissions: input.permissions ?? presetFor(input.role),
+        createdAt: Date.now(),
+        createdBy: user.uid,
+        ...(input.teamId ? { teamId: input.teamId } : {}),
+        ...(input.displayName ? { displayName: input.displayName } : {}),
+      };
+      await setDoc(doc(db, "roles", cred.user.uid), newRoleDoc);
+      await signOut(getAuth(secondary));
+      return cred.user.uid;
+    } finally {
+      await deleteApp(secondary);
+    }
+  };
+
+  const perms = useMemo(() => effectivePermissions(roleDoc), [roleDoc]);
+  const can = useCallback(
+    (p: Permission | Permission[]) => (Array.isArray(p) ? p.some((x) => perms.has(x)) : perms.has(p)),
+    [perms]
+  );
+
   const role = roleDoc?.role || null;
-  const workspaceUid = roleDoc?.workspaceUid || user?.uid || null;
+  const workspaceUid = access === "ok" ? roleDoc?.workspaceUid || null : null;
 
   return (
     <AuthContext.Provider
@@ -169,17 +162,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         roleDoc,
         workspaceUid,
         loading,
+        access,
         login,
-        signup,
         logout,
+        resetPassword,
         createUserAccount,
-        isAdmin: role === "admin",
-        isManager: role === "manager",
-        isAccountant: role === "accountant",
-        isLeadManager: role === "lead_manager",
-        isAssistant: role === "assistant",
+        perms,
+        can,
+        isAdmin: isSuperRole(role),
         isTeamMember: role === "team_member",
-        hasFullAccess: role === "admin" || role === "manager",
+        hasFullAccess: perms.has("data.manage"),
       }}
     >
       {children}

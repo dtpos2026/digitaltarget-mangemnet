@@ -1,0 +1,213 @@
+rules_version = '2';
+
+// Digital Target Portal — Firestore Security Rules
+//
+// Data layout:
+//   roles/{uid}                           login account → role, workspaceUid, permissions[], teamId, disabled
+//   users/{ws}/meta/settings              company settings (logo, footer…)
+//   users/{ws}/{collection}/{id}          business data (clients, leads, invoices…)
+//   users/{ws}/waAccounts|waConversations|waOutbox   WhatsApp (written by whatsapp-service)
+//   waSessions/**                         WhatsApp session keys — service only, never clients
+//
+// The block between GENERATED:BEGIN and GENERATED:END is produced from
+// src/lib/permission-presets.json by `npm run rules:generate`. Do not edit it by hand.
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ---------- identity ----------
+    function signedIn() { return request.auth != null; }
+    function rolePath(uid) { return /databases/$(database)/documents/roles/$(uid); }
+    function me() { return get(rolePath(request.auth.uid)).data; }
+    function active() {
+      return signedIn() && exists(rolePath(request.auth.uid)) && me().get('disabled', false) != true;
+    }
+    function isSuper(r) { return r.role in superRoles(); }
+    function permsOf(r) {
+      return isSuper(r) ? allPermissions() : r.get('permissions', presets().get(r.role, []));
+    }
+    function canAny(ps) { return active() && permsOf(me()).hasAny(ps); }
+    function member(ws) { return active() && me().workspaceUid == ws; }
+    function myTeamId() { return me().get('teamId', ''); }
+    function canPortal() { return canAny(['myportal.view']) && myTeamId() != ''; }
+    function changed() { return request.resource.data.diff(resource.data).affectedKeys(); }
+
+    // GENERATED:BEGIN
+    function superRoles() { return ["super_admin", "admin"]; }
+    function allPermissions() { return ["dashboard.view", "leads.view", "leads.create", "leads.edit", "leads.delete", "leads.assign", "whatsapp.view", "whatsapp.reply", "whatsapp.manage", "clients.view", "clients.manage", "projects.view", "projects.manage", "assignments.manage", "schedule.view", "schedule.manage", "queries.manage", "myportal.view", "invoices.view", "invoices.manage", "finance.view", "finance.manage", "reports.view", "team.view", "team.manage", "users.manage", "settings.manage", "audit.view", "data.manage"]; }
+    function presets() { return {
+      "manager": ["dashboard.view", "leads.view", "leads.create", "leads.edit", "leads.delete", "leads.assign", "whatsapp.view", "whatsapp.reply", "whatsapp.manage", "clients.view", "clients.manage", "projects.view", "projects.manage", "assignments.manage", "schedule.view", "schedule.manage", "queries.manage", "myportal.view", "invoices.view", "invoices.manage", "finance.view", "finance.manage", "reports.view", "team.view", "team.manage", "settings.manage", "data.manage"],
+      "lead_manager": ["leads.view", "leads.create", "leads.edit", "leads.delete", "leads.assign", "whatsapp.view", "whatsapp.reply", "schedule.view", "schedule.manage", "queries.manage"],
+      "sales_support": ["leads.view", "leads.create", "leads.edit", "whatsapp.view", "whatsapp.reply", "clients.view", "schedule.view", "schedule.manage"],
+      "accountant": ["dashboard.view", "invoices.view", "invoices.manage", "finance.view", "finance.manage", "reports.view"],
+      "social_media_manager": ["leads.view", "whatsapp.view", "whatsapp.reply", "clients.view", "projects.view", "schedule.view", "myportal.view"],
+      "graphic_designer": ["myportal.view"],
+      "video_editor": ["myportal.view"],
+      "assistant": ["leads.view", "leads.create", "leads.edit", "schedule.view", "schedule.manage"],
+      "team_member": ["myportal.view"],
+      "custom": []
+    }; }
+    function readPerms(col) { return {
+      "clients": ["clients.view", "leads.view", "invoices.view", "finance.view", "projects.view", "schedule.view"],
+      "projects": ["projects.view", "invoices.view", "finance.view", "schedule.view", "clients.view"],
+      "invoices": ["invoices.view", "finance.view"],
+      "accounting": ["finance.view", "reports.view"],
+      "khata": ["finance.view"],
+      "wallets": ["finance.view", "invoices.manage", "team.manage"],
+      "walletTransfers": ["finance.view"],
+      "budgets": ["finance.view"],
+      "team": ["team.view", "finance.view", "assignments.manage", "schedule.view", "users.manage", "leads.assign", "whatsapp.reply"],
+      "teamLogs": ["team.view"],
+      "payouts": ["team.view", "finance.view"],
+      "schedule": ["schedule.view", "dashboard.view"],
+      "leads": ["leads.view"],
+      "leadPhoneIndex": ["leads.view", "whatsapp.view"],
+      "assignments": ["assignments.manage", "team.view"],
+      "queries": ["queries.manage"]
+    }.get(col, []); }
+    function writePerms(col) { return {
+      "clients": ["clients.manage", "leads.edit"],
+      "projects": ["projects.manage", "invoices.manage"],
+      "invoices": ["invoices.manage"],
+      "accounting": ["finance.manage", "invoices.manage", "team.manage"],
+      "khata": ["finance.manage"],
+      "wallets": ["finance.manage", "invoices.manage", "team.manage"],
+      "walletTransfers": ["finance.manage"],
+      "budgets": ["finance.manage"],
+      "team": ["team.manage"],
+      "teamLogs": ["team.manage"],
+      "payouts": ["team.manage"],
+      "schedule": ["schedule.manage"],
+      "assignments": ["assignments.manage", "team.manage"],
+      "queries": ["queries.manage"],
+      "leadPhoneIndex": ["leads.create", "leads.edit"]
+    }.get(col, []); }
+    // GENERATED:END
+
+    // ---------- login accounts ----------
+    // Users can read their own role doc. Admins (users.manage) create/update
+    // accounts in their own workspace, never their own doc, never grant more
+    // than they hold, and only super roles can touch super-role accounts.
+    function validRoleWrite(uid) {
+      let d = request.resource.data;
+      return d.uid == uid
+        && d.workspaceUid == me().workspaceUid
+        && d.role is string
+        && (!(d.role in superRoles()) || isSuper(me()))
+        && permsOf(d).toSet().difference(permsOf(me()).toSet()).size() == 0;
+    }
+
+    match /roles/{uid} {
+      allow read: if signedIn() && (
+        request.auth.uid == uid ||
+        (canAny(['users.manage']) && resource.data.workspaceUid == me().workspaceUid)
+      );
+      allow create: if canAny(['users.manage']) && uid != request.auth.uid && validRoleWrite(uid);
+      allow update: if canAny(['users.manage']) && uid != request.auth.uid
+        && resource.data.workspaceUid == me().workspaceUid
+        && (!isSuper(resource.data) || isSuper(me()))
+        && validRoleWrite(uid);
+      // Accounts are disabled (disabled: true), never deleted, so history stays intact.
+      allow delete: if false;
+    }
+
+    // ---------- workspace ----------
+    match /users/{ws}/meta/{docId} {
+      allow read: if member(ws);
+      allow write: if member(ws) && canAny(['settings.manage']);
+    }
+
+    // Generic business collections; access comes from the generated maps.
+    // Collections missing from the maps are denied here (default deny).
+    function ownRead(col, id) {
+      return canPortal() && (
+        (col in ['assignments', 'queries', 'teamLogs', 'payouts'] && resource.data.memberId == myTeamId()) ||
+        (col == 'schedule' && resource.data.assignedTo == myTeamId()) ||
+        (col == 'team' && id == myTeamId())
+      );
+    }
+
+    match /users/{ws}/{col}/{id} {
+      allow read: if member(ws) && (canAny(readPerms(col)) || ownRead(col, id));
+      allow write: if member(ws) && canAny(writePerms(col));
+    }
+
+    // Leads: separate create / edit / assign / delete permissions.
+    match /users/{ws}/leads/{id} {
+      allow create: if member(ws) && canAny(['leads.create']);
+      allow update: if member(ws) && (
+        canAny(['leads.edit']) ||
+        (canAny(['leads.assign']) && changed().hasOnly(['assignedTo', 'assignedToName', 'assignedAt', 'updatedAt', 'updatedBy']))
+      );
+      allow delete: if member(ws) && canAny(['leads.delete']);
+    }
+
+    // My Portal: team members update status / chat on their own assignments…
+    match /users/{ws}/assignments/{id} {
+      allow update: if member(ws) && canPortal()
+        && resource.data.memberId == myTeamId()
+        && changed().hasOnly(['status', 'messages']);
+    }
+
+    // …and raise / reply to their own queries.
+    match /users/{ws}/queries/{id} {
+      allow create: if member(ws) && canPortal()
+        && request.resource.data.memberId == myTeamId()
+        && request.resource.data.status == 'Open';
+      allow update: if member(ws) && canPortal()
+        && resource.data.memberId == myTeamId()
+        && changed().hasOnly(['messages']);
+    }
+
+    // ---------- WhatsApp ----------
+    // Status, QR and session fields are written only by whatsapp-service (Admin SDK).
+    match /users/{ws}/waAccounts/{id} {
+      allow read: if member(ws) && canAny(['whatsapp.view']);
+      allow create: if member(ws) && canAny(['whatsapp.manage'])
+        && request.resource.data.status == 'disconnected';
+      allow update: if member(ws) && canAny(['whatsapp.manage'])
+        && changed().hasOnly(['command', 'settings', 'label', 'expectedPhone']);
+    }
+
+    match /users/{ws}/waConversations/{id} {
+      allow read: if member(ws) && canAny(['whatsapp.view']);
+      allow update: if member(ws) && canAny(['whatsapp.reply'])
+        && changed().hasOnly(['assignedTo', 'assignedToName', 'tags', 'notes', 'followUpDate',
+                              'unreadCount', 'leadId', 'archived', 'pinned', 'updatedAt', 'updatedBy']);
+
+      match /messages/{messageId} {
+        allow read: if member(ws) && canAny(['whatsapp.view']);
+      }
+    }
+
+    // Replies are queued here; the service validates the conversation and sends.
+    match /users/{ws}/waOutbox/{id} {
+      allow read: if member(ws) && canAny(['whatsapp.view']);
+      allow create: if member(ws) && canAny(['whatsapp.reply'])
+        && request.resource.data.keys().hasOnly(['id', 'accountId', 'conversationId', 'text', 'status',
+                                                 'createdBy', 'createdByEmail', 'createdAt'])
+        && request.resource.data.createdBy == request.auth.uid
+        && request.resource.data.status == 'queued'
+        && request.resource.data.conversationId is string
+        && request.resource.data.text is string
+        && request.resource.data.text.size() > 0
+        && request.resource.data.text.size() <= 4096;
+    }
+
+    // ---------- notifications (one doc per recipient) ----------
+    match /users/{ws}/notifications/{id} {
+      allow read, delete: if member(ws) && resource.data.userUid == request.auth.uid;
+      allow update: if member(ws) && resource.data.userUid == request.auth.uid
+        && changed().hasOnly(['read', 'readAt']);
+      allow create: if member(ws) && request.resource.data.createdBy == request.auth.uid;
+    }
+
+    // ---------- audit log (append-only) ----------
+    match /users/{ws}/auditLogs/{id} {
+      allow read: if member(ws) && canAny(['audit.view']);
+      allow create: if member(ws) && request.resource.data.actorUid == request.auth.uid;
+    }
+
+    // waSessions/** and anything not matched above: no client access.
+  }
+}

@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { useData } from "@/contexts/DataContext";
 import { uid } from "@/lib/db";
+import { writeSafeDocument } from "@/lib/safeHtml";
 
 export default function ClientsTab() {
   const { data, addItem, removeItem } = useData();
@@ -19,10 +20,9 @@ export default function ClientsTab() {
     const rows = data.clients.map(c => `<tr><td>${c.name}</td><td>${c.phone || ""}</td><td>${c.status || ""}</td><td>${c.ref || ""}</td></tr>`).join("");
     const w = window.open("", "_blank");
     if (!w) return;
-    w.document.write(`<html><head><title>Clients</title><style>body{font-family:system-ui;padding:14px}table{width:100%;border-collapse:collapse}th,td{border-bottom:1px solid #ccc;padding:8px;text-align:left}th{font-size:11px;text-transform:uppercase}</style></head><body>
+    writeSafeDocument(w, `<html><head><title>Clients</title><style>body{font-family:system-ui;padding:14px}table{width:100%;border-collapse:collapse}th,td{border-bottom:1px solid #ccc;padding:8px;text-align:left}th{font-size:11px;text-transform:uppercase}</style></head><body>
     <h2 style="margin:0">DIGITAL TARGET</h2><div style="font-weight:900;margin-top:4px">Clients Report</div><div style="font-size:12px;color:#666">Generated: ${new Date().toLocaleString()}</div><hr/>
     <table><thead><tr><th>Name</th><th>Phone</th><th>Status</th><th>Notes</th></tr></thead><tbody>${rows || "<tr><td colspan='4'>No clients</td></tr>"}</tbody></table></body></html>`);
-    w.document.close();
     setTimeout(() => w.print(), 300);
   };
 

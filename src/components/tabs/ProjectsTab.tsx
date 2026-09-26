@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { useData } from "@/contexts/DataContext";
 import { uid, todayISO, fmtMoney, dtLocalNowValue, normalizeDT, parseDT, fmtDTShort, durationText, isLateProject } from "@/lib/db";
+import { writeSafeDocument } from "@/lib/safeHtml";
 
 export default function ProjectsTab() {
   const { data, addItem, removeItem, updateItem } = useData();
@@ -63,10 +64,9 @@ export default function ProjectsTab() {
     }).join("");
     const w = window.open("", "_blank");
     if (!w) return;
-    w.document.write(`<html><head><title>Projects</title><style>body{font-family:system-ui;padding:14px}table{width:100%;border-collapse:collapse}th,td{border-bottom:1px solid #ccc;padding:8px;text-align:left}th{font-size:11px;text-transform:uppercase}</style></head><body>
+    writeSafeDocument(w, `<html><head><title>Projects</title><style>body{font-family:system-ui;padding:14px}table{width:100%;border-collapse:collapse}th,td{border-bottom:1px solid #ccc;padding:8px;text-align:left}th{font-size:11px;text-transform:uppercase}</style></head><body>
     <h2 style="margin:0">DIGITAL TARGET</h2><div style="font-weight:900;margin-top:4px">Projects Report</div><hr/>
     <table><thead><tr><th>Client</th><th>Title</th><th>Category</th><th>Status</th><th>Budget</th></tr></thead><tbody>${rows || "<tr><td colspan='5'>No projects</td></tr>"}</tbody></table></body></html>`);
-    w.document.close();
     setTimeout(() => w.print(), 300);
   };
 

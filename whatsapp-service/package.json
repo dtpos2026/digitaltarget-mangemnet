@@ -1,0 +1,30 @@
+{
+  "name": "dt-whatsapp-service",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Digital Target portal — WhatsApp (linked device / QR) capture service",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/index.js",
+    "dev": "tsx watch src/index.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run test/unit",
+    "test:integration": "cd .. && firebase emulators:exec --project demo-dt --only firestore \"cd whatsapp-service && vitest run test/integration\"",
+    "gen-key": "node -e \"console.log(require('crypto').randomBytes(32).toString('base64'))\""
+  },
+  "dependencies": {
+    "@whiskeysockets/baileys": "7.0.0-rc14",
+    "firebase-admin": "^14.5.0",
+    "pino": "^10.3.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.16.5",
+    "tsx": "^4.20.0",
+    "typescript": "^5.8.3",
+    "vitest": "^3.2.4"
+  }
+}

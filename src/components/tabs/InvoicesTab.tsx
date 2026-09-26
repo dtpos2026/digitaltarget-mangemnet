@@ -3,11 +3,15 @@ import { useData } from "@/contexts/DataContext";
 import { uid, fmtMoney, nowText, todayISO, fileToBase64 } from "@/lib/db";
 import { saveElementAsImage } from "@/lib/exportUtils";
 import QRCode from "qrcode";
+import { useAuth } from "@/contexts/AuthContext";
+import { normalizePhone } from "@/lib/phone";
+import { writeSafeDocument } from "@/lib/safeHtml";
 
 interface InvItem { desc: string; qty: number; price: number; total: number; }
 
 export default function InvoicesTab() {
-  const { data, addItem, removeItem, updateItem } = useData();
+  const { data, addItem, removeItem, updateItem, updateSettings } = useData();
+  const { can } = useAuth();
   const [clientId, setClientId] = useState("");
   const [projectId, setProjectId] = useState("");
   const [items, setItems] = useState<InvItem[]>([{ desc: "", qty: 1, price: 0, total: 0 }]);
@@ -24,8 +28,9 @@ export default function InvoicesTab() {
   const [previewMode, setPreviewMode] = useState<"A4"|"POS">("A4");
   const [editId, setEditId] = useState<string>("");
   const printRef = useRef<HTMLDivElement>(null);
-  const autoQRA4Ref = useRef<HTMLDivElement>(null);
-  const autoQRPOSRef = useRef<HTMLDivElement>(null);
+  // Auto receipt QR as a data URL <img>: a <canvas> loses its pixels when the
+  // preview HTML is copied into the print window, so the printed QR was blank.
+  const [autoQR, setAutoQR] = useState("");
 
   const updateItemRow = (idx: number, field: string, val: string) => {
     const newItems = [...items];
@@ -80,9 +85,15 @@ export default function InvoicesTab() {
     const sign = signUpload || data.settings.signature || null;
     const bankQR = bankQRUpload || data.settings.bankQR || null;
 
-    // Save defaults for future invoices
-    if (signUpload) await updateItem("settings", { ...data.settings, signature: signUpload });
-    if (bankQRUpload) await updateItem("settings", { ...data.settings, bankQR: bankQRUpload });
+    // Save uploads as defaults for future invoices (settings live in meta/settings,
+    // not a collection — updateItem("settings") used to crash the app here).
+    if ((signUpload || bankQRUpload) && can("settings.manage")) {
+      await updateSettings({
+        ...data.settings,
+        ...(signUpload ? { signature: signUpload } : {}),
+        ...(bankQRUpload ? { bankQR: bankQRUpload } : {}),
+      });
+    }
 
     let finalProjectId = projectId;
 
@@ -178,7 +189,7 @@ export default function InvoicesTab() {
 
   const sendWhatsApp = (inv: any) => {
     const c = data.clients.find(x => x.id === inv.clientId);
-    const phone = String(c?.phone || "").replace(/[^\d]/g, "");
+    const phone = normalizePhone(c?.phone);
     const items2 = (inv.items || []).map((it: any) => `${it.desc} x${it.qty} = Rs ${fmtMoney(it.total)}`).join("\n");
     const msg = `Assalam o Alaikum ${c?.name || ""},\n\nInvoice: ${inv.id}\nDate: ${inv.dateTime}\n\n${items2}\n\nTotal: Rs ${fmtMoney(inv.grandTotal)}\nPaid: Rs ${fmtMoney(inv.paidAmount || 0)}\nStatus: ${inv.status}\n\nDigital Target`;
     window.open(`https://wa.me/${phone}?text=${encodeURIComponent(msg)}`, "_blank");
@@ -186,7 +197,7 @@ export default function InvoicesTab() {
 
   const sendReminder = (inv: any) => {
     const c = data.clients.find(x => x.id === inv.clientId);
-    const phone = String(c?.phone || "").replace(/[^\d]/g, "");
+    const phone = normalizePhone(c?.phone);
     const due = Math.max(0, (inv.grandTotal || 0) - (inv.paidAmount || 0));
     const msg = `Assalam o Alaikum ${c?.name || ""},\n\nYeh friendly reminder hai ke aapki invoice ${inv.id} ka pending amount Rs ${fmtMoney(due)} hai.\n\nKindly payment jaldi se arrange kar dein.\n\nShukriya!\nDigital Target`;
     window.open(`https://wa.me/${phone}?text=${encodeURIComponent(msg)}`, "_blank");
@@ -194,7 +205,7 @@ export default function InvoicesTab() {
 
   const sendReceived = (inv: any) => {
     const c = data.clients.find(x => x.id === inv.clientId);
-    const phone = String(c?.phone || "").replace(/[^\d]/g, "");
+    const phone = normalizePhone(c?.phone);
     const msg = `Assalam o Alaikum ${c?.name || ""},\n\nAapki payment Rs ${fmtMoney(inv.paidAmount || 0)} mil gayi hai. Invoice ${inv.id}.\n\nShukriya!\nDigital Target`;
     window.open(`https://wa.me/${phone}?text=${encodeURIComponent(msg)}`, "_blank");
   };
@@ -213,27 +224,20 @@ export default function InvoicesTab() {
 
   // Generate QR after preview renders
   useEffect(() => {
+    setAutoQR("");
     if (!previewInv) return;
-    const payload = invoiceTextPayload(previewInv);
-    if (previewMode === "A4" && autoQRA4Ref.current) {
-      autoQRA4Ref.current.innerHTML = "";
-      const canvas = document.createElement("canvas");
-      autoQRA4Ref.current.appendChild(canvas);
-      QRCode.toCanvas(canvas, payload, { width: 128, margin: 1 });
-    }
-    if (previewMode === "POS" && autoQRPOSRef.current) {
-      autoQRPOSRef.current.innerHTML = "";
-      const canvas = document.createElement("canvas");
-      autoQRPOSRef.current.appendChild(canvas);
-      QRCode.toCanvas(canvas, payload, { width: 128, margin: 1 });
-    }
-  }, [previewInv, previewMode, invoiceTextPayload]);
+    let cancelled = false;
+    QRCode.toDataURL(invoiceTextPayload(previewInv), { width: 256, margin: 1 })
+      .then((url: string) => { if (!cancelled) setAutoQR(url); })
+      .catch((e: unknown) => console.warn("QR failed", e));
+    return () => { cancelled = true; };
+  }, [previewInv, invoiceTextPayload]);
 
   const printPreview = () => {
     if (!printRef.current) return;
     const w = window.open("", "_blank");
     if (!w) return;
-    w.document.write(`<html><head><title>Invoice</title><style>
+    writeSafeDocument(w, `<html><head><title>Invoice</title><style>
       body{margin:0;font-family:system-ui,sans-serif}
       .r-top{display:flex;justify-content:space-between;gap:10px;align-items:flex-start}
       .r-logo{width:46mm;max-height:26mm;object-fit:contain}
@@ -262,10 +266,7 @@ export default function InvoicesTab() {
       .posQR{display:flex;justify-content:center;margin:6px 0}
       .small{font-size:12px;color:#64748b}
       @media print{body{margin:0}}
-    </style></head><body>`);
-    w.document.write(printRef.current.innerHTML);
-    w.document.write("</body></html>");
-    w.document.close();
+    </style></head><body>${printRef.current.innerHTML}</body></html>`);
     setTimeout(() => w.print(), 300);
   };
 
@@ -287,7 +288,7 @@ export default function InvoicesTab() {
     }).join("");
     const w2 = window.open("", "_blank");
     if (!w2) return;
-    w2.document.write(`<html><head><title>Invoice List</title><style>body{margin:0;font-family:system-ui,sans-serif;padding:14px}table{width:100%;border-collapse:collapse}th,td{border-bottom:1px solid #ddd;padding:8px;text-align:left;font-size:13px}th{font-weight:900}</style></head><body>
+    writeSafeDocument(w2, `<html><head><title>Invoice List</title><style>body{margin:0;font-family:system-ui,sans-serif;padding:14px}table{width:100%;border-collapse:collapse}th,td{border-bottom:1px solid #ddd;padding:8px;text-align:left;font-size:13px}th{font-weight:900}</style></head><body>
       <h2 style="margin:0">DIGITAL TARGET</h2>
       <div style="font-weight:900;margin-top:4px">Invoices Report</div>
       <div style="font-size:12px;color:#64748b">Generated: ${nowText()}</div>
@@ -295,7 +296,6 @@ export default function InvoicesTab() {
       <table><thead><tr><th>ID</th><th>Client</th><th>Status</th><th>Total</th><th>Paid</th><th>Due</th></tr></thead>
       <tbody>${rows || '<tr><td colspan="6">No invoices</td></tr>'}</tbody></table>
     </body></html>`);
-    w2.document.close();
     setTimeout(() => w2.print(), 300);
   };
 
@@ -354,7 +354,7 @@ export default function InvoicesTab() {
           {/* QR Section */}
           <div style={{ display: "flex", gap: 10, alignItems: "center", marginTop: 10, flexWrap: "wrap" }}>
             <div style={{ width: "34mm", height: "34mm", border: "1px solid #111", borderRadius: 10, display: "grid", placeItems: "center", overflow: "hidden" }}>
-              <div ref={autoQRA4Ref}></div>
+              {autoQR ? <img src={autoQR} alt="receipt qr" style={{ width: "100%", height: "100%", objectFit: "contain" }} /> : null}
             </div>
             <div style={{ width: "34mm", height: "34mm", border: "1px solid #111", borderRadius: 10, display: "grid", placeItems: "center", overflow: "hidden" }}>
               {bankQRData ? <img src={bankQRData} alt="bankqr" style={{ width: "100%", height: "100%", objectFit: "contain" }} /> : <div style={{ fontSize: 10 }}>Bank QR</div>}
@@ -459,7 +459,9 @@ export default function InvoicesTab() {
         {/* QR */}
         <div style={{ textAlign: "center", fontSize: 9, color: "#888", letterSpacing: 1, textTransform: "uppercase", marginTop: 4 }}>Scan to Verify</div>
         <div style={{ display: "flex", justifyContent: "center", margin: "4px 0" }}>
-          <div ref={autoQRPOSRef} style={{ border: "1px solid #eee", borderRadius: 6, padding: 4 }}></div>
+          <div style={{ border: "1px solid #eee", borderRadius: 6, padding: 4 }}>
+            {autoQR ? <img src={autoQR} alt="receipt qr" style={{ width: 128, height: 128 }} /> : null}
+          </div>
         </div>
 
         {/* VIP Footer */}

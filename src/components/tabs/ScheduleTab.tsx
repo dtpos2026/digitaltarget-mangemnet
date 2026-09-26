@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { useData } from "@/contexts/DataContext";
 import { uid, todayISO, fmtMoney } from "@/lib/db";
+import { writeSafeDocument } from "@/lib/safeHtml";
 
 export default function ScheduleTab() {
   const { data, addItem, removeItem, updateItem } = useData();
@@ -112,16 +113,14 @@ export default function ScheduleTab() {
   const printDailySchedule = () => {
     const w = window.open("", "_blank");
     if (!w) return;
-    w.document.write(buildBrandedSheet("today"));
-    w.document.close();
+    writeSafeDocument(w, buildBrandedSheet("today"));
     setTimeout(() => w.print(), 300);
   };
 
   const printAllHistory = () => {
     const w = window.open("", "_blank");
     if (!w) return;
-    w.document.write(buildBrandedSheet("all"));
-    w.document.close();
+    writeSafeDocument(w, buildBrandedSheet("all"));
     setTimeout(() => w.print(), 300);
   };
 
@@ -132,8 +131,7 @@ export default function ScheduleTab() {
     if (!to) return;
     const w = window.open("", "_blank");
     if (!w) return;
-    w.document.write(buildBrandedSheet("range", from, to));
-    w.document.close();
+    writeSafeDocument(w, buildBrandedSheet("range", from, to));
     setTimeout(() => w.print(), 300);
   };
 
@@ -159,7 +157,7 @@ export default function ScheduleTab() {
 
     const w = window.open("", "_blank");
     if (!w) return;
-    w.document.write(`<html><head><title>Schedule ${mm}mm</title></head><body style="margin:0;padding:0">
+    writeSafeDocument(w, `<html><head><title>Schedule ${mm}mm</title></head><body style="margin:0;padding:0">
       <div style="width:${width};background:#fff;color:#000;padding:8px 6px;font-family:Arial,sans-serif">
         ${logo ? `<div style="text-align:center;margin-bottom:4px"><img src="${logo}" style="max-height:40px;max-width:60mm;object-fit:contain" /></div>` : ""}
         <div style="text-align:center;font-weight:900;font-size:${mm === "80" ? "16px" : "14px"}">${data.settings?.exportName || "DIGITAL TARGET"}</div>
@@ -171,7 +169,6 @@ export default function ScheduleTab() {
         <div style="text-align:center;font-size:${mm === "80" ? "9px" : "8px"};color:#666;margin-top:2px">${data.settings?.footer || ""}</div>
       </div>
     </body></html>`);
-    w.document.close();
     setTimeout(() => w.print(), 300);
   };
 

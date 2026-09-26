@@ -2,9 +2,14 @@ import React, { useState, useRef } from "react";
 import { useData } from "@/contexts/DataContext";
 import { uid, todayISO, fmtMoney } from "@/lib/db";
 import { saveElementAsImage, printElementHTML } from "@/lib/exportUtils";
+import { leadPhones, normalizePhone, waLink } from "@/lib/phone";
+import { LEAD_STATUSES } from "@/lib/leads";
+import { navigate } from "@/lib/navigation";
+import { useAuth } from "@/contexts/AuthContext";
 
 export default function LeadsTab() {
   const { data, addItem, removeItem, updateItem } = useData();
+  const { can } = useAuth();
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [whatsapp, setWhatsapp] = useState("");
@@ -30,7 +35,7 @@ export default function LeadsTab() {
   ];
   const softwareOptions = ["POS Software","Management Software","Automation Software","Billing/Invoicing","Custom Solution","None","Other"];
   const planOptions = ["Monthly","Yearly","Lifetime","One-time","Undecided"];
-  const statusOptions = ["New","Contacted","Interested","Meeting Scheduled","Demo Given","Negotiation","Converted","Lost","Follow-up"];
+  const statusOptions = LEAD_STATUSES;
   const sourceOptions = ["WhatsApp","Facebook","Instagram","TikTok","Google","Referral","Walk-in","Website","Cold Call","Other"];
 
   const clearForm = () => {
@@ -44,15 +49,23 @@ export default function LeadsTab() {
     if (!name.trim()) { alert("Lead name required"); return; }
     const payload = {
       name: name.trim(), phone, whatsapp: whatsapp || phone,
+      phoneE164: normalizePhone(whatsapp || phone),
       category, serviceType, software, plan, status, source, referralBy: referralBy.trim(),
-      meetingDate, followUpDate, notes, date: todayISO(),
+      meetingDate, followUpDate, notes,
     };
+    // Duplicate check on phone / WhatsApp number (normalised, so 0345… and +92345… match).
+    const numbers = leadPhones(payload);
+    const dup = numbers.length
+      ? data.leads.find(l => l.id !== editId && leadPhones(l).some(n => numbers.includes(n)))
+      : null;
+    if (dup && !confirm(`Yeh number pehle se lead "${dup.name}" (${dup.status || "New"}) mein mojood hai.\nPhir bhi save karein?`)) return;
     if (editId) {
       const old = data.leads.find(l => l.id === editId);
-      if (old) await updateItem("leads", { ...old, ...payload });
+      // Keep the original creation date (it used to be overwritten on every edit).
+      if (old) await updateItem("leads", { ...old, ...payload, date: old.date || todayISO(), updatedAt: new Date().toISOString() });
       alert("Lead updated ✅");
     } else {
-      await addItem("leads", { id: uid("LD"), ...payload });
+      await addItem("leads", { id: uid("LD"), ...payload, date: todayISO(), createdAt: new Date().toISOString() });
     }
     clearForm();
   };
@@ -68,9 +81,11 @@ export default function LeadsTab() {
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
-  const toggleStatus = async (l: any) => {
-    const i = statusOptions.indexOf(l.status);
-    await updateItem("leads", { ...l, status: statusOptions[(i + 1) % statusOptions.length] });
+  // Explicit status picker (the old "Status" button cycled through statuses,
+  // so one extra click could mark a lead Converted or Lost).
+  const changeStatus = async (l: any, next: string) => {
+    if (next === l.status) return;
+    await updateItem("leads", { ...l, status: next, updatedAt: new Date().toISOString() });
   };
 
   const convertToClient = async (l: any) => {
@@ -82,8 +97,9 @@ export default function LeadsTab() {
 
   const sendWhatsApp = (l: any) => {
     const msg = `Assalam o Alaikum ${l.name},\nDigital Target se baat ho rahi thi ${l.serviceType || l.software} ke baare mein.\nKya aap interested hain? Hum aapko demo de sakte hain.\nShukriya!`;
-    const p = String(l.whatsapp || l.phone || "").replace(/[^\d]/g, "");
-    window.open(`https://wa.me/${p}?text=${encodeURIComponent(msg)}`, "_blank");
+    const link = waLink(l.whatsapp || l.phone, msg);
+    if (!link) { alert("Is lead ka phone number sahi nahi hai."); return; }
+    window.open(link, "_blank");
   };
 
   const filtered = data.leads.filter(l => {
@@ -93,7 +109,7 @@ export default function LeadsTab() {
   });
 
   const total = data.leads.length;
-  const interested = data.leads.filter(l => ["Interested","Demo Given","Meeting Scheduled","Negotiation"].includes(l.status)).length;
+  const interested = data.leads.filter(l => ["Interested","Demo Given","Meeting Scheduled","Negotiation","Qualified","Proposal"].includes(l.status)).length;
   const converted = data.leads.filter(l => l.status === "Converted").length;
   const meetingsToday = data.leads.filter(l => l.meetingDate === todayISO()).length;
 
@@ -248,22 +264,28 @@ export default function LeadsTab() {
           <thead><tr><th>Name</th><th>Phone</th><th>Category</th><th>Service</th><th>Status</th><th>Source</th><th>Meeting</th><th>Follow-up</th><th>Action</th></tr></thead>
           <tbody>
             {filtered.slice().reverse().map((l) => {
-              const stClass = l.status === "Converted" ? "ok" : l.status === "Lost" ? "bad" : ["Interested","Demo Given","Meeting Scheduled","Negotiation"].includes(l.status) ? "warn" : "";
+              const stClass = l.status === "Converted" ? "ok" : l.status === "Lost" ? "bad" : ["Interested","Demo Given","Meeting Scheduled","Negotiation","Qualified","Proposal"].includes(l.status) ? "warn" : "";
               return (
                 <tr key={l.id}>
                   <td><b>{l.name}</b><div className="small">{(l.notes || "").slice(0, 50)}</div></td>
                   <td>{l.phone || ""}{l.whatsapp && l.whatsapp !== l.phone ? <div className="small">WA: {l.whatsapp}</div> : null}</td>
                   <td>{l.category || ""}</td>
                   <td>{l.serviceType || l.software || ""}</td>
-                  <td><span className={`badge ${stClass}`}>{l.status}</span></td>
+                  <td>
+                    <span className={`badge ${stClass}`}>{l.status}</span>
+                    <select value={l.status} onChange={(e) => changeStatus(l, e.target.value)} style={{ marginTop: 4, minWidth: 110 }} aria-label="Change status">
+                      {[...new Set([...statusOptions, l.status])].map(s => <option key={s}>{s}</option>)}
+                    </select>
+                  </td>
                   <td>{l.source || ""}{l.referralBy ? <div className="small">By: {l.referralBy}</div> : null}</td>
                   <td>{l.meetingDate || "—"}</td>
                   <td>{l.followUpDate || "—"}</td>
                   <td className="rowActions">
                     <button className="btnSmall" onClick={() => handleEdit(l)}>Edit</button>
-                    <button className="btnSmall" onClick={() => toggleStatus(l)}>Status</button>
                     <button className="btnSmall" onClick={() => convertToClient(l)}>→ Client</button>
-                    <button className="btnSmall" onClick={() => sendWhatsApp(l)}>WhatsApp</button>
+                    {l.conversationId && can("whatsapp.view")
+                      ? <button className="btnSmall" onClick={() => navigate({ tab: "whatsapp", conversationId: l.conversationId })}>💬 Chat</button>
+                      : <button className="btnSmall" onClick={() => sendWhatsApp(l)}>WhatsApp</button>}
                     <button className="btnSmall" onClick={() => { if (confirm("Delete?")) removeItem("leads", l.id); }}>Delete</button>
                   </td>
                 </tr>

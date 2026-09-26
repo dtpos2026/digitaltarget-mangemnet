@@ -192,7 +192,7 @@ export default function AssignmentsTab() {
                   <tr><td style={tdL}><b>Role / Type</b></td><td style={tdR}>{m?.role || "—"} / {m?.memberType || "Employee"}</td></tr>
                   <tr><td style={tdL}><b>Category</b></td><td style={tdR}>{a.category}</td></tr>
                   <tr><td style={tdL}><b>Task Title</b></td><td style={tdR}><b>{a.title}</b></td></tr>
-                  <tr><td style={tdL}><b>Description</b></td><td style={tdR} dangerouslySetInnerHTML={{ __html: (a.description || "—").replace(/\n/g, "<br/>") }} /></tr>
+                  <tr><td style={tdL}><b>Description</b></td><td style={{ ...tdR, whiteSpace: "pre-wrap" }}>{a.description || "—"}</td></tr>
                   <tr><td style={tdL}><b>Deadline</b></td><td style={tdR}>{a.deadline ? new Date(a.deadline).toLocaleString() : "—"}</td></tr>
                   <tr><td style={tdL}><b>Rate / Amount</b></td><td style={tdR}>Rs {fmtMoney(a.rate || 0)}</td></tr>
                   <tr><td style={tdL}><b>Drive / Content Link</b></td><td style={tdR}><span style={{ wordBreak: "break-all" }}>{a.driveLink || "—"}</span></td></tr>

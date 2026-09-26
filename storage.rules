@@ -1,0 +1,48 @@
+rules_version = '2';
+
+// Digital Target Portal — Cloud Storage Security Rules
+// Files are uploaded by whatsapp-service (Admin SDK). Clients only read, and
+// only with the same workspace + permission checks as firestore.rules.
+// The GENERATED block is produced by `npm run rules:generate`.
+
+service firebase.storage {
+  match /b/{bucket}/o {
+    function rolePath() { return /databases/(default)/documents/roles/$(request.auth.uid); }
+    function me() { return firestore.get(rolePath()).data; }
+    function active() {
+      return request.auth != null && firestore.exists(rolePath()) && me().get('disabled', false) != true;
+    }
+    function isSuper(r) { return r.role in superRoles(); }
+    function permsOf(r) {
+      return isSuper(r) ? allPermissions() : r.get('permissions', presets().get(r.role, []));
+    }
+    function canAny(ws, ps) { return active() && me().workspaceUid == ws && permsOf(me()).hasAny(ps); }
+
+    // GENERATED:BEGIN
+    function superRoles() { return ["super_admin", "admin"]; }
+    function allPermissions() { return ["dashboard.view", "leads.view", "leads.create", "leads.edit", "leads.delete", "leads.assign", "whatsapp.view", "whatsapp.reply", "whatsapp.manage", "clients.view", "clients.manage", "projects.view", "projects.manage", "assignments.manage", "schedule.view", "schedule.manage", "queries.manage", "myportal.view", "invoices.view", "invoices.manage", "finance.view", "finance.manage", "reports.view", "team.view", "team.manage", "users.manage", "settings.manage", "audit.view", "data.manage"]; }
+    function presets() { return {
+      "manager": ["dashboard.view", "leads.view", "leads.create", "leads.edit", "leads.delete", "leads.assign", "whatsapp.view", "whatsapp.reply", "whatsapp.manage", "clients.view", "clients.manage", "projects.view", "projects.manage", "assignments.manage", "schedule.view", "schedule.manage", "queries.manage", "myportal.view", "invoices.view", "invoices.manage", "finance.view", "finance.manage", "reports.view", "team.view", "team.manage", "settings.manage", "data.manage"],
+      "lead_manager": ["leads.view", "leads.create", "leads.edit", "leads.delete", "leads.assign", "whatsapp.view", "whatsapp.reply", "schedule.view", "schedule.manage", "queries.manage"],
+      "sales_support": ["leads.view", "leads.create", "leads.edit", "whatsapp.view", "whatsapp.reply", "clients.view", "schedule.view", "schedule.manage"],
+      "accountant": ["dashboard.view", "invoices.view", "invoices.manage", "finance.view", "finance.manage", "reports.view"],
+      "social_media_manager": ["leads.view", "whatsapp.view", "whatsapp.reply", "clients.view", "projects.view", "schedule.view", "myportal.view"],
+      "graphic_designer": ["myportal.view"],
+      "video_editor": ["myportal.view"],
+      "assistant": ["leads.view", "leads.create", "leads.edit", "schedule.view", "schedule.manage"],
+      "team_member": ["myportal.view"],
+      "custom": []
+    }; }
+    // GENERATED:END
+
+    // WhatsApp media: workspaces/{ws}/whatsapp/{conversationId}/{file}
+    match /workspaces/{ws}/whatsapp/{allPaths=**} {
+      allow read: if canAny(ws, ['whatsapp.view']);
+      allow write: if false;
+    }
+
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

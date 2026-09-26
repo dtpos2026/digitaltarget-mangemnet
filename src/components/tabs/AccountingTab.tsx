@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { useData } from "@/contexts/DataContext";
 import { uid, todayISO, fmtMoney } from "@/lib/db";
+import { writeSafeDocument } from "@/lib/safeHtml";
 
 export default function AccountingTab() {
   const { data, addItem, removeItem, updateItem } = useData();
@@ -129,10 +130,9 @@ export default function AccountingTab() {
     const w = window.open("", "_blank");
     if (!w) return;
     const logo = data.settings?.logo?.data || "";
-    w.document.write(`<html><head><title>Accounting</title><style>body{font-family:system-ui;padding:14px}table{width:100%;border-collapse:collapse}th,td{border-bottom:1px solid #ccc;padding:8px;text-align:left}th{font-size:11px;text-transform:uppercase}.brand{display:flex;gap:10px;align-items:center;border-bottom:2px solid #111;padding-bottom:8px;margin-bottom:10px}.brand img{max-height:50px;max-width:120px;object-fit:contain}</style></head><body>
+    writeSafeDocument(w, `<html><head><title>Accounting</title><style>body{font-family:system-ui;padding:14px}table{width:100%;border-collapse:collapse}th,td{border-bottom:1px solid #ccc;padding:8px;text-align:left}th{font-size:11px;text-transform:uppercase}.brand{display:flex;gap:10px;align-items:center;border-bottom:2px solid #111;padding-bottom:8px;margin-bottom:10px}.brand img{max-height:50px;max-width:120px;object-fit:contain}</style></head><body>
     <div class="brand">${logo ? `<img src="${logo}" />` : ""}<div><h2 style="margin:0">DIGITAL TARGET</h2><div style="font-weight:900">Accounting Report</div><div style="font-size:11px;color:#666">${new Date().toLocaleString()}</div></div></div>
     <table><thead><tr><th>Date</th><th>Type</th><th>Client</th><th>Category</th><th>Amount</th><th>Account</th><th>Description</th></tr></thead><tbody>${rows || "<tr><td colspan='7'>No entries</td></tr>"}</tbody></table></body></html>`);
-    w.document.close();
     setTimeout(() => w.print(), 300);
   };
 
@@ -203,7 +203,7 @@ export default function AccountingTab() {
                   <td>{a.category}</td>
                   <td>{fmtMoney(a.amount)}</td>
                   <td>{w?.name || ""}</td>
-                  <td>{a.receipt?.data ? <button className="btnSmall" onClick={() => { const wi = window.open(""); if(wi) wi.document.write(`<img src="${a.receipt.data}" style="max-width:100%"/>`); }}>View</button> : ""}</td>
+                  <td>{a.receipt?.data ? <button className="btnSmall" onClick={() => { const wi = window.open(""); if(wi) writeSafeDocument(wi, `<img src="${a.receipt.data}" style="max-width:100%"/>`); }}>View</button> : ""}</td>
                   <td className="rowActions">
                     <button className="btnSmall" onClick={() => handleEdit(a)}>Edit</button>
                     <button className="btnSmall" onClick={() => handleDelete(a)}>Delete</button>

@@ -1,0 +1,6 @@
+# Docker build context is the repo root (see whatsapp-service/Dockerfile)
+**/node_modules
+**/dist
+**/.env
+**/.env.*
+.git

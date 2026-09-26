@@ -1,6 +1,7 @@
 import React, { useRef } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useData } from "@/contexts/DataContext";
+import NotificationBell from "./NotificationBell";
 
 interface Props {
   onToggleTheme: () => void;
@@ -105,10 +106,11 @@ Example: ALL ya 30d ya 3m`, "ALL"
           </div>
           <div className="title">
             <b>Digital Target Business Management</b>
-            <span>Hybrid OS • Cloud Ready</span>
+            <span>Management Portal</span>
           </div>
         </div>
         <div className="actions">
+          <NotificationBell />
           <button className="btnSmall" onClick={onToggleTheme}>Light/Dark</button>
           {hasFullAccess && <button className="btnSmall" onClick={handleBackup}>Backup</button>}
           {hasFullAccess && <button className="btnSmall" onClick={handleRestore}>Restore</button>}

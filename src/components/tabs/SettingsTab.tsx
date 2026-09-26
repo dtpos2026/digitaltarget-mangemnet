@@ -2,9 +2,12 @@ import React, { useState } from "react";
 import { useData } from "@/contexts/DataContext";
 import { fileToBase64 } from "@/lib/db";
 import UserManagement from "@/components/UserManagement";
+import AuditLog from "@/components/AuditLog";
+import { useAuth } from "@/contexts/AuthContext";
 
 export default function SettingsTab() {
   const { data, updateSettings } = useData();
+  const { can } = useAuth();
   const [phone, setPhone] = useState(data.settings.phone || "");
   const [exportName, setExportName] = useState(data.settings.exportName || "DigitalTarget");
   const [footer, setFooter] = useState(data.settings.footer || "");
@@ -28,6 +31,7 @@ export default function SettingsTab() {
 
   return (
     <>
+      {can("settings.manage") && (
       <section className="card">
         <h2>Settings</h2>
         <div className="grid3">
@@ -72,11 +76,11 @@ export default function SettingsTab() {
         <div style={{ display: "flex", gap: 10, marginTop: 10 }}>
           <button className="btnSolid" onClick={handleSave}>Save Settings</button>
         </div>
-        <hr />
-        <div className="small">QR generation uses a CDN library. First time needs internet to load the QR script.</div>
       </section>
+      )}
 
       <UserManagement />
+      <AuditLog />
     </>
   );
 }

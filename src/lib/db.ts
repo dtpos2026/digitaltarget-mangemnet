@@ -8,6 +8,8 @@ import {
   onSnapshot,
   Unsubscribe,
   getDoc,
+  query,
+  where,
 } from "firebase/firestore";
 
 export interface AppData {
@@ -158,16 +160,29 @@ export function humanDuration(fromDate: string, toDate: string) {
   return `${days}d`;
 }
 
-export function fileToBase64(file: File | undefined | null): Promise<any> {
+/** Images are stored inline in Firestore docs (1 MB doc limit), so keep them small. */
+export const MAX_INLINE_IMAGE_BYTES = 300 * 1024;
+
+export function fileToBase64(file: File | undefined | null, maxBytes = MAX_INLINE_IMAGE_BYTES): Promise<any> {
   return new Promise((resolve) => {
     if (!file) { resolve(null); return; }
+    if (!file.type.startsWith("image/")) {
+      alert(`"${file.name}" image nahi hai. Sirf PNG/JPG/WebP upload karein.`);
+      resolve(null);
+      return;
+    }
+    if (file.size > maxBytes) {
+      alert(`"${file.name}" bohat bari hai (${Math.round(file.size / 1024)} KB). ${Math.round(maxBytes / 1024)} KB se choti image upload karein.`);
+      resolve(null);
+      return;
+    }
     const r = new FileReader();
     r.onload = () => resolve({ name: file.name, data: r.result });
     r.readAsDataURL(file);
   });
 }
 
-// All paths now use workspaceUid (admin's UID) so all roles share the same data store
+// All paths use workspaceUid (admin's UID) so all roles share the same data store
 function userCol(workspaceUid: string, colName: string) {
   return collection(db, "users", workspaceUid, colName);
 }
@@ -189,7 +204,38 @@ export async function saveSettings(workspaceUid: string, settings: any) {
   await setDoc(doc(db, "users", workspaceUid, "meta", "settings"), settings);
 }
 
-export async function loadAllData(workspaceUid: string): Promise<AppData> {
+/**
+ * What the signed-in user may load. Collections they cannot read in full are
+ * either skipped or, for My Portal users, limited to their own team record —
+ * the same scoping firestore.rules enforces.
+ */
+export interface ReadScope {
+  canRead: (colName: string) => boolean;
+  /** Linked team record id for My Portal users. */
+  teamId?: string;
+  ownScoped: Record<string, string>;
+}
+
+function scopedQuery(workspaceUid: string, colName: string, scope: ReadScope) {
+  if (scope.canRead(colName)) return userCol(workspaceUid, colName);
+  const field = scope.ownScoped[colName];
+  if (field && scope.teamId) return query(userCol(workspaceUid, colName), where(field, "==", scope.teamId));
+  return null;
+}
+
+async function loadCollection(workspaceUid: string, colName: string, scope: ReadScope): Promise<any[]> {
+  if (colName === "team" && !scope.canRead("team")) {
+    if (!scope.teamId) return [];
+    const own = await getDoc(userDoc(workspaceUid, "team", scope.teamId));
+    return own.exists() ? [own.data()] : [];
+  }
+  const q = scopedQuery(workspaceUid, colName, scope);
+  if (!q) return [];
+  const snap = await getDocs(q);
+  return snap.docs.map((d) => d.data());
+}
+
+export async function loadAllData(workspaceUid: string, scope: ReadScope): Promise<AppData> {
   const data = { ...defaultData };
 
   try {
@@ -197,14 +243,17 @@ export async function loadAllData(workspaceUid: string): Promise<AppData> {
     if (settingsDoc.exists()) {
       data.settings = { ...defaultData.settings, ...settingsDoc.data() };
     }
-  } catch (e) {}
+  } catch (e) {
+    console.warn("settings load failed", e);
+  }
 
   await Promise.all(
     ALL_COLLECTIONS.map(async (colName) => {
       try {
-        const snap = await getDocs(userCol(workspaceUid, colName));
-        (data as any)[colName] = snap.docs.map((d) => d.data());
-      } catch (e) {}
+        (data as any)[colName] = await loadCollection(workspaceUid, colName, scope);
+      } catch (e) {
+        console.warn(`load ${colName} failed`, e);
+      }
     })
   );
 
@@ -214,9 +263,66 @@ export async function loadAllData(workspaceUid: string): Promise<AppData> {
 export function subscribeCollection(
   workspaceUid: string,
   colName: string,
+  scope: ReadScope,
   callback: (items: any[]) => void
 ): Unsubscribe {
-  return onSnapshot(userCol(workspaceUid, colName), (snap) => {
-    callback(snap.docs.map((d) => d.data()));
-  });
+  const q = scopedQuery(workspaceUid, colName, scope);
+  if (!q) return () => {};
+  return onSnapshot(
+    q,
+    (snap) => callback(snap.docs.map((d) => d.data())),
+    (err) => console.warn(`live ${colName} failed`, err)
+  );
+}
+
+export interface AuditEntry {
+  action: string;
+  collection: string;
+  entityId: string;
+  entityLabel?: string;
+  changes?: Record<string, { from: unknown; to: unknown }>;
+  details?: string;
+}
+
+/** Append-only activity log (users/{ws}/auditLogs). Never blocks the UI. */
+export function writeAudit(
+  workspaceUid: string,
+  actor: { uid: string; email?: string | null },
+  entry: AuditEntry
+) {
+  const id = uid("AU");
+  return setDoc(userDoc(workspaceUid, "auditLogs", id), {
+    id,
+    at: new Date().toISOString(),
+    actorUid: actor.uid,
+    actorEmail: actor.email || "",
+    ...entry,
+  }).catch((e) => console.warn("audit write failed", e));
+}
+
+const isPrimitive = (v: unknown) => v === null || ["string", "number", "boolean"].includes(typeof v);
+const clip = (v: unknown) => (typeof v === "string" && v.length > 200 ? v.slice(0, 200) + "…" : v);
+
+/** Field-level diff for the audit log; large values (images, arrays) are summarised. */
+export function diffForAudit(before: any, after: any): Record<string, { from: unknown; to: unknown }> {
+  const changes: Record<string, { from: unknown; to: unknown }> = {};
+  const keys = new Set([...Object.keys(before || {}), ...Object.keys(after || {})]);
+  for (const k of keys) {
+    const a = before?.[k];
+    const b = after?.[k];
+    if (JSON.stringify(a) === JSON.stringify(b)) continue;
+    if (Array.isArray(a) || Array.isArray(b)) {
+      changes[k] = { from: Array.isArray(a) ? `${a.length} items` : null, to: Array.isArray(b) ? `${b.length} items` : null };
+    } else if (isPrimitive(a ?? null) && isPrimitive(b ?? null)) {
+      changes[k] = { from: clip(a ?? null), to: clip(b ?? null) };
+    } else {
+      changes[k] = { from: a === undefined ? null : "(object)", to: b === undefined ? null : "(object)" };
+    }
+    if (Object.keys(changes).length >= 25) break;
+  }
+  return changes;
+}
+
+export function entityLabel(item: any): string {
+  return String(item?.name || item?.title || item?.subject || item?.task || item?.desc || item?.id || "").slice(0, 120);
 }

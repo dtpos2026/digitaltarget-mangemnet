@@ -1,3 +1,4 @@
+import { writeSafeDocument } from "./safeHtml";
 import html2canvas from "html2canvas";
 
 export async function saveElementAsImage(
@@ -34,7 +35,7 @@ export async function saveElementAsImage(
 export function printElementHTML(html: string) {
   const w = window.open("", "_blank");
   if (!w) return;
-  w.document.write(`<html><head><title>Print</title><style>
+  writeSafeDocument(w, `<html><head><title>Print</title><style>
     body{margin:0;font-family:system-ui,sans-serif}
     .r-top{display:flex;justify-content:space-between;gap:10px;align-items:flex-start}
     .r-title{margin:0;font-size:26px;font-weight:900}
@@ -57,9 +58,6 @@ export function printElementHTML(html: string) {
     th,td{border-bottom:1px solid #ddd;padding:8px;text-align:left;font-size:13px}
     th{font-weight:900;font-size:12px}
     @media print{body{margin:0}}
-  </style></head><body>`);
-  w.document.write(html);
-  w.document.write("</body></html>");
-  w.document.close();
+  </style></head><body>${html}</body></html>`);
   setTimeout(() => w.print(), 300);
 }

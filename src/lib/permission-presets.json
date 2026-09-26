@@ -1,0 +1,425 @@
+{
+  "permissions": [
+    {
+      "key": "dashboard.view",
+      "group": "Dashboard",
+      "label": "Dashboard View"
+    },
+    {
+      "key": "leads.view",
+      "group": "Leads",
+      "label": "Leads View"
+    },
+    {
+      "key": "leads.create",
+      "group": "Leads",
+      "label": "Leads Create"
+    },
+    {
+      "key": "leads.edit",
+      "group": "Leads",
+      "label": "Leads Edit"
+    },
+    {
+      "key": "leads.delete",
+      "group": "Leads",
+      "label": "Leads Delete"
+    },
+    {
+      "key": "leads.assign",
+      "group": "Leads",
+      "label": "Assign Leads"
+    },
+    {
+      "key": "whatsapp.view",
+      "group": "WhatsApp",
+      "label": "WhatsApp Access (read inbox)"
+    },
+    {
+      "key": "whatsapp.reply",
+      "group": "WhatsApp",
+      "label": "WhatsApp Reply"
+    },
+    {
+      "key": "whatsapp.manage",
+      "group": "WhatsApp",
+      "label": "WhatsApp Connect / Disconnect"
+    },
+    {
+      "key": "clients.view",
+      "group": "Clients",
+      "label": "Clients View"
+    },
+    {
+      "key": "clients.manage",
+      "group": "Clients",
+      "label": "Clients Create / Edit / Delete"
+    },
+    {
+      "key": "projects.view",
+      "group": "Projects",
+      "label": "Projects View"
+    },
+    {
+      "key": "projects.manage",
+      "group": "Projects",
+      "label": "Projects Create / Edit / Delete"
+    },
+    {
+      "key": "assignments.manage",
+      "group": "Team Work",
+      "label": "Assign Work (Assignments)"
+    },
+    {
+      "key": "schedule.view",
+      "group": "Team Work",
+      "label": "Schedule View"
+    },
+    {
+      "key": "schedule.manage",
+      "group": "Team Work",
+      "label": "Schedule Create / Edit"
+    },
+    {
+      "key": "queries.manage",
+      "group": "Team Work",
+      "label": "Team Queries Inbox"
+    },
+    {
+      "key": "myportal.view",
+      "group": "Team Work",
+      "label": "My Portal (own tasks, payouts, queries)"
+    },
+    {
+      "key": "invoices.view",
+      "group": "Finance",
+      "label": "Invoices View"
+    },
+    {
+      "key": "invoices.manage",
+      "group": "Finance",
+      "label": "Invoices Create / Edit / Delete"
+    },
+    {
+      "key": "finance.view",
+      "group": "Finance",
+      "label": "Accounting, Khata, Accounts, Budget View"
+    },
+    {
+      "key": "finance.manage",
+      "group": "Finance",
+      "label": "Accounting, Khata, Accounts, Budget Edit"
+    },
+    {
+      "key": "reports.view",
+      "group": "Reports",
+      "label": "Reports"
+    },
+    {
+      "key": "team.view",
+      "group": "Team",
+      "label": "Team View"
+    },
+    {
+      "key": "team.manage",
+      "group": "Team",
+      "label": "Team Management (members, payouts)"
+    },
+    {
+      "key": "users.manage",
+      "group": "Administration",
+      "label": "Users, Roles & Permissions"
+    },
+    {
+      "key": "settings.manage",
+      "group": "Administration",
+      "label": "Company Settings"
+    },
+    {
+      "key": "audit.view",
+      "group": "Administration",
+      "label": "Audit Log"
+    },
+    {
+      "key": "data.manage",
+      "group": "Administration",
+      "label": "Backup / Restore / Reset"
+    }
+  ],
+  "superRoles": [
+    "super_admin",
+    "admin"
+  ],
+  "roles": [
+    {
+      "value": "super_admin",
+      "label": "Super Admin"
+    },
+    {
+      "value": "admin",
+      "label": "Admin"
+    },
+    {
+      "value": "manager",
+      "label": "Manager"
+    },
+    {
+      "value": "lead_manager",
+      "label": "Lead Manager"
+    },
+    {
+      "value": "sales_support",
+      "label": "Sales / Support"
+    },
+    {
+      "value": "accountant",
+      "label": "Accountant"
+    },
+    {
+      "value": "social_media_manager",
+      "label": "Social Media Manager"
+    },
+    {
+      "value": "graphic_designer",
+      "label": "Graphic Designer"
+    },
+    {
+      "value": "video_editor",
+      "label": "Video Editor"
+    },
+    {
+      "value": "assistant",
+      "label": "Assistant"
+    },
+    {
+      "value": "team_member",
+      "label": "Employee / Team Member"
+    },
+    {
+      "value": "custom",
+      "label": "Custom Role"
+    }
+  ],
+  "presets": {
+    "manager": [
+      "dashboard.view",
+      "leads.view",
+      "leads.create",
+      "leads.edit",
+      "leads.delete",
+      "leads.assign",
+      "whatsapp.view",
+      "whatsapp.reply",
+      "whatsapp.manage",
+      "clients.view",
+      "clients.manage",
+      "projects.view",
+      "projects.manage",
+      "assignments.manage",
+      "schedule.view",
+      "schedule.manage",
+      "queries.manage",
+      "myportal.view",
+      "invoices.view",
+      "invoices.manage",
+      "finance.view",
+      "finance.manage",
+      "reports.view",
+      "team.view",
+      "team.manage",
+      "settings.manage",
+      "data.manage"
+    ],
+    "lead_manager": [
+      "leads.view",
+      "leads.create",
+      "leads.edit",
+      "leads.delete",
+      "leads.assign",
+      "whatsapp.view",
+      "whatsapp.reply",
+      "schedule.view",
+      "schedule.manage",
+      "queries.manage"
+    ],
+    "sales_support": [
+      "leads.view",
+      "leads.create",
+      "leads.edit",
+      "whatsapp.view",
+      "whatsapp.reply",
+      "clients.view",
+      "schedule.view",
+      "schedule.manage"
+    ],
+    "accountant": [
+      "dashboard.view",
+      "invoices.view",
+      "invoices.manage",
+      "finance.view",
+      "finance.manage",
+      "reports.view"
+    ],
+    "social_media_manager": [
+      "leads.view",
+      "whatsapp.view",
+      "whatsapp.reply",
+      "clients.view",
+      "projects.view",
+      "schedule.view",
+      "myportal.view"
+    ],
+    "graphic_designer": [
+      "myportal.view"
+    ],
+    "video_editor": [
+      "myportal.view"
+    ],
+    "assistant": [
+      "leads.view",
+      "leads.create",
+      "leads.edit",
+      "schedule.view",
+      "schedule.manage"
+    ],
+    "team_member": [
+      "myportal.view"
+    ],
+    "custom": []
+  },
+  "collectionRead": {
+    "clients": [
+      "clients.view",
+      "leads.view",
+      "invoices.view",
+      "finance.view",
+      "projects.view",
+      "schedule.view"
+    ],
+    "projects": [
+      "projects.view",
+      "invoices.view",
+      "finance.view",
+      "schedule.view",
+      "clients.view"
+    ],
+    "invoices": [
+      "invoices.view",
+      "finance.view"
+    ],
+    "accounting": [
+      "finance.view",
+      "reports.view"
+    ],
+    "khata": [
+      "finance.view"
+    ],
+    "wallets": [
+      "finance.view",
+      "invoices.manage",
+      "team.manage"
+    ],
+    "walletTransfers": [
+      "finance.view"
+    ],
+    "budgets": [
+      "finance.view"
+    ],
+    "team": [
+      "team.view",
+      "finance.view",
+      "assignments.manage",
+      "schedule.view",
+      "users.manage",
+      "leads.assign",
+      "whatsapp.reply"
+    ],
+    "teamLogs": [
+      "team.view"
+    ],
+    "payouts": [
+      "team.view",
+      "finance.view"
+    ],
+    "schedule": [
+      "schedule.view",
+      "dashboard.view"
+    ],
+    "leads": [
+      "leads.view"
+    ],
+    "leadPhoneIndex": [
+      "leads.view",
+      "whatsapp.view"
+    ],
+    "assignments": [
+      "assignments.manage",
+      "team.view"
+    ],
+    "queries": [
+      "queries.manage"
+    ]
+  },
+  "collectionWrite": {
+    "clients": [
+      "clients.manage",
+      "leads.edit"
+    ],
+    "projects": [
+      "projects.manage",
+      "invoices.manage"
+    ],
+    "invoices": [
+      "invoices.manage"
+    ],
+    "accounting": [
+      "finance.manage",
+      "invoices.manage",
+      "team.manage"
+    ],
+    "khata": [
+      "finance.manage"
+    ],
+    "wallets": [
+      "finance.manage",
+      "invoices.manage",
+      "team.manage"
+    ],
+    "walletTransfers": [
+      "finance.manage"
+    ],
+    "budgets": [
+      "finance.manage"
+    ],
+    "team": [
+      "team.manage"
+    ],
+    "teamLogs": [
+      "team.manage"
+    ],
+    "payouts": [
+      "team.manage"
+    ],
+    "schedule": [
+      "schedule.manage"
+    ],
+    "assignments": [
+      "assignments.manage",
+      "team.manage"
+    ],
+    "queries": [
+      "queries.manage"
+    ],
+    "leadPhoneIndex": [
+      "leads.create",
+      "leads.edit"
+    ]
+  },
+  "ownScoped": {
+    "assignments": "memberId",
+    "queries": "memberId",
+    "teamLogs": "memberId",
+    "payouts": "memberId",
+    "schedule": "assignedTo"
+  }
+}

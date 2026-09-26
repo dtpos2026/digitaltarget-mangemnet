@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { useData } from "@/contexts/DataContext";
 import { uid, todayISO, fmtMoney } from "@/lib/db";
+import { writeSafeDocument } from "@/lib/safeHtml";
 
 export default function AccountsTab() {
   const { data, addItem, removeItem, updateItem } = useData();
@@ -60,10 +61,9 @@ export default function AccountsTab() {
     const rows = data.wallets.map(w => `<tr><td>${w.name}</td><td>${w.number || ""}</td><td>Rs ${fmtMoney(w.balance || 0)}</td></tr>`).join("");
     const w = window.open("", "_blank");
     if (!w) return;
-    w.document.write(`<html><head><title>Accounts</title><style>body{font-family:system-ui;padding:14px}table{width:100%;border-collapse:collapse}th,td{border-bottom:1px solid #ccc;padding:8px;text-align:left}th{font-size:11px;text-transform:uppercase}</style></head><body>
+    writeSafeDocument(w, `<html><head><title>Accounts</title><style>body{font-family:system-ui;padding:14px}table{width:100%;border-collapse:collapse}th,td{border-bottom:1px solid #ccc;padding:8px;text-align:left}th{font-size:11px;text-transform:uppercase}</style></head><body>
     <h2 style="margin:0">DIGITAL TARGET</h2><div style="font-weight:900;margin-top:4px">Accounts Sheet</div><hr/>
     <table><thead><tr><th>Account</th><th>Number</th><th>Balance</th></tr></thead><tbody>${rows || "<tr><td colspan='3'>No accounts</td></tr>"}</tbody></table></body></html>`);
-    w.document.close();
     setTimeout(() => w.print(), 300);
   };
 

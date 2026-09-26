@@ -2,6 +2,7 @@ import React, { useRef, useEffect, useCallback } from "react";
 import { useData } from "@/contexts/DataContext";
 import { fmtMoney, todayISO, nowText } from "@/lib/db";
 import { saveElementAsImage, printElementHTML } from "@/lib/exportUtils";
+import { sanitizeHtml } from "@/lib/safeHtml";
 
 function useChart(drawFn: (canvas: HTMLCanvasElement) => void) {
   const ref = useRef<HTMLCanvasElement>(null);
@@ -208,7 +209,7 @@ export default function DashboardTab() {
   const exportDashboardImage = async (fmt: "png" | "jpg") => {
     // Create a temporary div with the dashboard report HTML
     const tempDiv = document.createElement("div");
-    tempDiv.innerHTML = buildDashboardHTML();
+    tempDiv.innerHTML = sanitizeHtml(buildDashboardHTML());
     tempDiv.style.position = "absolute";
     tempDiv.style.left = "-9999px";
     tempDiv.style.background = "#fff";

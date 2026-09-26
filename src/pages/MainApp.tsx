@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from "react";
-import { useAuth, UserRole } from "@/contexts/AuthContext";
+import { useAuth } from "@/contexts/AuthContext";
 import { useData } from "@/contexts/DataContext";
 import Sidebar from "@/components/app/Sidebar";
 import Topbar from "@/components/app/Topbar";
@@ -19,11 +19,16 @@ import SettingsTab from "@/components/tabs/SettingsTab";
 import AssignmentsTab from "@/components/tabs/AssignmentsTab";
 import MyPortalTab from "@/components/tabs/MyPortalTab";
 import QueriesTab from "@/components/tabs/QueriesTab";
+import WhatsAppTab from "@/components/whatsapp/WhatsAppTab";
+import { TAB_PERMISSIONS } from "@/lib/permissions";
+import { onNavigate } from "@/lib/navigation";
 
 interface TabDef { id: string; label: string; countKey: string }
 
 const ALL_TABS: TabDef[] = [
   { id: "dash", label: "Dashboard", countKey: "live" },
+  { id: "whatsapp", label: "WhatsApp", countKey: "whatsapp" },
+  { id: "leads", label: "Leads", countKey: "leads" },
   { id: "clients", label: "Clients", countKey: "clients" },
   { id: "projects", label: "Projects", countKey: "projects" },
   { id: "assignments", label: "Assignments", countKey: "assignments" },
@@ -34,35 +39,34 @@ const ALL_TABS: TabDef[] = [
   { id: "team", label: "Team", countKey: "team" },
   { id: "schedule", label: "Schedule", countKey: "schedule" },
   { id: "reports", label: "Reports", countKey: "reports" },
-  { id: "leads", label: "Leads", countKey: "leads" },
   { id: "budget", label: "Budget", countKey: "budget" },
   { id: "queries", label: "Queries", countKey: "queries" },
   { id: "settings", label: "Settings", countKey: "settings" },
+  { id: "myportal", label: "My Portal", countKey: "myportal" },
 ];
 
-const MY_PORTAL: TabDef = { id: "myportal", label: "My Portal", countKey: "myportal" };
-
-const ROLE_TABS: Record<UserRole, string[]> = {
-  admin: ALL_TABS.map(t => t.id),
-  manager: ALL_TABS.map(t => t.id).filter(id => id !== "settings").concat("settings"),
-  accountant: ["dash", "invoices", "accounting", "khata", "accounts", "reports", "budget"],
-  lead_manager: ["leads", "schedule", "queries"],
-  assistant: ["leads", "schedule"],
-  team_member: ["myportal"],
-};
-
 export default function MainApp() {
-  const { role, isTeamMember } = useAuth();
+  const { can } = useAuth();
   const { data, loading } = useData();
   const [darkMode, setDarkMode] = useState(false);
 
-  const TABS: TabDef[] = useMemo(() => {
-    const allowedIds = role ? ROLE_TABS[role] : ["myportal"];
-    const pool = isTeamMember ? [MY_PORTAL] : [...ALL_TABS, MY_PORTAL];
-    return pool.filter(t => allowedIds.includes(t.id));
-  }, [role, isTeamMember]);
+  // A tab is shown when the user holds any permission listed for it.
+  const TABS: TabDef[] = useMemo(
+    () => ALL_TABS.filter((t) => can(TAB_PERMISSIONS[t.id] || [])),
+    [can]
+  );
 
   const [activeTab, setActiveTab] = useState<string>(TABS[0]?.id || "dash");
+
+  const [waFocus, setWaFocus] = useState<string | null>(null);
+  useEffect(
+    () => onNavigate((d) => {
+      if (!TABS.find((t) => t.id === d.tab)) return;
+      setActiveTab(d.tab);
+      if (d.tab === "whatsapp" && d.conversationId) setWaFocus(d.conversationId);
+    }),
+    [TABS]
+  );
 
   useEffect(() => {
     if (TABS.length && !TABS.find(t => t.id === activeTab)) {
@@ -91,7 +95,8 @@ export default function MainApp() {
       case "leads": return data.leads.length;
       case "budget": return "📊";
       case "queries": return data.queries.filter((q: any) => (q.status || "Open") === "Open").length || data.queries.length;
-      case "settings": return "Logo";
+      case "settings": return "⚙";
+      case "whatsapp": return "Chat";
       case "myportal": return "👤";
       default: return 0;
     }
@@ -107,12 +112,17 @@ export default function MainApp() {
   }
 
   const renderTab = () => {
-    const allowed = role ? ROLE_TABS[role] : [];
-    if (!allowed.includes(activeTab)) {
-      return <MyPortalTab />;
+    if (!TABS.find((t) => t.id === activeTab)) {
+      return (
+        <section className="card">
+          <h2>No modules</h2>
+          <div className="small">Aap ke account ko abhi koi module assign nahi hua. Admin se permissions maangein.</div>
+        </section>
+      );
     }
     switch (activeTab) {
       case "dash": return <DashboardTab />;
+      case "whatsapp": return <WhatsAppTab focusConversationId={waFocus} />;
       case "clients": return <ClientsTab />;
       case "projects": return <ProjectsTab />;
       case "assignments": return <AssignmentsTab />;
