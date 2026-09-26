@@ -41,6 +41,10 @@ Phone (0345-1873354) ⇄ WhatsApp servers ⇄ whatsapp-service (Docker, always o
    - links the chat, assigns the default assignee (if set), and notifies everyone with Leads/WhatsApp access.
 5. **Reply:** the inbox writes to `waOutbox`. The service checks the conversation, sends the message, and records who sent it (visible in the chat and the audit log).
 
+6. **Photos / documents from the portal:** the 📎 button uploads the file (≤ 16 MB; images, video, audio, PDF, Office, text) to `workspaces/{ws}/whatsapp-outbox/…`. The outbox entry references it, and the service sends it with the typed text as the caption. The rules only accept files from the workspace's own outbox folder.
+7. **Calls:** voice and video calls still **ring and are answered on the phone**, because a linked device cannot take calls. The service logs each call in the chat (📞 incoming, then 📵 missed / declined or answered). A call from a new number creates a lead like a message does, and calls are counted in the daily stats.
+8. **Daily stats** (`users/{ws}/waStats/{YYYY-MM-DD}`): messages in/out, portal replies per user, first-response times, calls, missed calls, new chats and new leads. History imports are counted by message date. The **Performance** page (permission *Team & WhatsApp Performance*) shows these alongside the lead funnel, leads by source and a per-team-member table (leads, contacted → converted, conversion %, chats, average first response, chats waiting over 1 hour), with CSV export.
+
 Response analytics are stored per conversation: first inbound message, first response time, and message counts in/out.
 
 ## Settings (WhatsApp tab → ⚙ Settings)

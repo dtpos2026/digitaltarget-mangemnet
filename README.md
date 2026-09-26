@@ -45,15 +45,18 @@ npm run dev              # run the service locally (see .env.example)
 
 ## Status
 
-**Done (this increment):** audit; security foundation (no public sign-up, role presets + per-user permission
+**Done (increment 2):** Digital Target branding (logo mark, purple theme, new sidebar/topbar shell,
+login, mobile drawer); invoices redesigned end to end (numbering, discount, tax, payment method, terms, branded
+A4 + POS templates, PDF download, record-payment dialog); WhatsApp photo/document sending, call log, daily stats
+and the Performance page.
+
+**Done (increment 1):** audit; security foundation (no public sign-up, role presets + per-user permission
 checkboxes, database-enforced access, disabled accounts, secure user creation, XSS fix); audit log;
 WhatsApp QR connect popup, capture service, inbox, automatic lead capture with dedup, notifications;
 bug fixes listed in the commit history.
 
 **Next phases (planned):**
-1. Admin dashboard with lead / WhatsApp / team KPIs, funnel, trends and date filters
-2. Full Leads CRM (timeline, configurable statuses/sources, tags, value, priority) + lead analytics per member
+1. Full Leads CRM (timeline, configurable statuses/sources, tags, value, priority) + lead analytics per member
 3. Unified tasks + Graphic Design / Video Editing workflows (revisions, files, approvals)
 4. Campaigns / Ads with cost, CPL and attribution; client profile with full history
-5. Invoice upgrades (numbering, tax, discount, payment method, real PDF) — needs logo + sample invoices
 6. Reports (CSV / Excel / PDF), global search, router + UI redesign, soft delete everywhere

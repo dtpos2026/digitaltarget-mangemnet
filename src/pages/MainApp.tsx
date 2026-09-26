@@ -1,4 +1,8 @@
-import React, { useState, useMemo, useEffect } from "react";
+import React, { useState, useMemo, useEffect, lazy, Suspense } from "react";
+
+// Heavier pages (charts, PDF export) load on first open.
+const InvoicesTab = lazy(() => import("@/components/tabs/InvoicesTab"));
+const PerformanceTab = lazy(() => import("@/components/tabs/PerformanceTab"));
 import { useAuth } from "@/contexts/AuthContext";
 import { useData } from "@/contexts/DataContext";
 import Sidebar from "@/components/app/Sidebar";
@@ -7,7 +11,6 @@ import { BrandLogo } from "@/components/app/BrandMark";
 import DashboardTab from "@/components/tabs/DashboardTab";
 import ClientsTab from "@/components/tabs/ClientsTab";
 import ProjectsTab from "@/components/tabs/ProjectsTab";
-import InvoicesTab from "@/components/tabs/InvoicesTab";
 import AccountingTab from "@/components/tabs/AccountingTab";
 import KhataTab from "@/components/tabs/KhataTab";
 import AccountsTab from "@/components/tabs/AccountsTab";
@@ -21,7 +24,6 @@ import AssignmentsTab from "@/components/tabs/AssignmentsTab";
 import MyPortalTab from "@/components/tabs/MyPortalTab";
 import QueriesTab from "@/components/tabs/QueriesTab";
 import WhatsAppTab from "@/components/whatsapp/WhatsAppTab";
-import PerformanceTab from "@/components/tabs/PerformanceTab";
 import { TAB_PERMISSIONS } from "@/lib/permissions";
 import { onNavigate } from "@/lib/navigation";
 
@@ -157,7 +159,7 @@ export default function MainApp() {
       <Sidebar tabs={TABS} activeTab={activeTab} onTabChange={setActiveTab} getCount={getCount} open={navOpen} onClose={() => setNavOpen(false)} />
       <div className="appMain">
         <Topbar onToggleTheme={toggleTheme} dark={darkMode} title={ALL_TABS.find((t) => t.id === activeTab)?.label || ""} onMenu={() => setNavOpen(true)} />
-        <main className="grid appContent">{renderTab()}</main>
+        <main className="grid appContent"><Suspense fallback={<div className="small">Loading…</div>}>{renderTab()}</Suspense></main>
       </div>
     </div>
   );

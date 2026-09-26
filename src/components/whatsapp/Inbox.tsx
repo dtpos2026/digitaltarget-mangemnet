@@ -10,7 +10,9 @@ import {
   conversationName,
   durationLabel,
   formatPhone,
+  MAX_ATTACHMENT_BYTES,
   queueMessage,
+  uploadAttachment,
   timeLabel,
   updateConversation,
   useConversations,
@@ -73,6 +75,8 @@ export default function Inbox({ ws, account, focusConversationId }: { ws: string
   const outbox = useOutbox(ws, selectedId);
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
+  const [file, setFile] = useState<File | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
   const [showPanel, setShowPanel] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const lastSeen = useRef<Map<string, number>>(new Map());
@@ -84,7 +88,7 @@ export default function Inbox({ ws, account, focusConversationId }: { ws: string
   const today = todayISO();
 
   useEffect(() => { if (focusConversationId) setSelectedId(focusConversationId); }, [focusConversationId]);
-  useEffect(() => { setMsgMax(60); setText(""); }, [selectedId]);
+  useEffect(() => { setMsgMax(60); setText(""); setFile(null); }, [selectedId]);
 
   const selected = convs.find((c) => c.id === selectedId) || null;
   const lead = selected?.leadId ? leadsById.get(selected.leadId) : null;
@@ -133,12 +137,14 @@ export default function Inbox({ ws, account, focusConversationId }: { ws: string
 
   const send = async () => {
     const body = text.trim();
-    if (!body || !selected || !account) return;
+    if ((!body && !file) || !selected || !account) return;
     if (account.status !== "connected") { alert("WhatsApp connected nahi hai. Pehle connect karein."); return; }
     setSending(true);
     try {
-      await queueMessage(ws, selected.accountId || account.id, selected.id, body, { uid: user!.uid, email: user!.email });
+      const media = file ? await uploadAttachment(ws, file) : undefined;
+      await queueMessage(ws, selected.accountId || account.id, selected.id, body, { uid: user!.uid, email: user!.email }, media);
       setText("");
+      setFile(null);
       if (lead && can("leads.edit") && ["New", ""].includes(lead.status || "")) {
         await updateItem("leads", { ...lead, status: "Contacted", lastContactAt: new Date().toISOString() });
       }
@@ -255,6 +261,11 @@ export default function Inbox({ ws, account, focusConversationId }: { ws: string
                 return (
                   <React.Fragment key={m.id}>
                     {showDay && <div className="waDay">{new Date(m.timestamp).toLocaleDateString()}</div>}
+                    {m.kind === "call" ? (
+                      <div className={`waCall ${m.callStatus === "timeout" || m.callStatus === "reject" ? "missed" : ""}`}>
+                        {m.text} • {new Date(m.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                      </div>
+                    ) : (
                     <div className={`waBubble ${m.fromMe ? "out" : "in"} ${m.deleted ? "deleted" : ""}`}>
                       {m.fromMe && m.source === "portal" && m.senderName && <div className="waBy">{m.senderName}</div>}
                       <MediaView m={m} />
@@ -267,12 +278,14 @@ export default function Inbox({ ws, account, focusConversationId }: { ws: string
                       </div>
                       {reactions.length > 0 && <div className="waReactions">{reactions.join(" ")}</div>}
                     </div>
+                    )}
                   </React.Fragment>
                 );
               })}
               {outbox.map((o) => (
                 <div key={o.id} className={`waBubble out pending ${o.status}`}>
-                  <div className="waText">{o.text}</div>
+                  {o.media?.fileName && <div className="waMediaStub">📎 {o.media.fileName}</div>}
+                  {o.text && <div className="waText">{o.text}</div>}
                   <div className="waMsgMeta">
                     {o.status === "failed" ? (
                       <>⚠ {o.error || "failed"} <button className="linkBtn" onClick={() => retry(o.text)}>Retry</button></>
@@ -285,15 +298,34 @@ export default function Inbox({ ws, account, focusConversationId }: { ws: string
 
             {canReply ? (
               <div className="waComposer">
+                <input
+                  ref={fileRef}
+                  type="file"
+                  hidden
+                  accept="image/*,video/mp4,audio/*,application/pdf,.doc,.docx,.xls,.xlsx,.txt"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0] || null;
+                    e.target.value = "";
+                    if (f && f.size > MAX_ATTACHMENT_BYTES) { alert("File 16 MB se choti honi chahiye."); return; }
+                    setFile(f);
+                  }}
+                />
+                <button className="iconBtn" onClick={() => fileRef.current?.click()} disabled={account?.status !== "connected"} title="Photo / document bhejein" aria-label="Attach file">📎</button>
+                {file && (
+                  <span className="waAttach" title={file.name}>
+                    {file.type.startsWith("image/") ? "🖼" : "📄"} {file.name.slice(0, 24)} ({Math.round(file.size / 1024)} KB)
+                    <button className="linkBtn" onClick={() => setFile(null)} aria-label="Remove attachment">✕</button>
+                  </span>
+                )}
                 <textarea
                   value={text}
                   onChange={(e) => setText(e.target.value)}
                   onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }}
-                  placeholder={account?.status === "connected" ? "Message likhein… (Enter = send, Shift+Enter = new line)" : "WhatsApp connected nahi hai"}
+                  placeholder={account?.status === "connected" ? (file ? "Caption (optional)…" : "Message likhein… (Enter = send, Shift+Enter = new line)") : "WhatsApp connected nahi hai"}
                   maxLength={4096}
                   rows={1}
                 />
-                <button className="btnSolid" onClick={send} disabled={sending || !text.trim() || account?.status !== "connected"}>Send</button>
+                <button className="btnSolid" onClick={send} disabled={sending || (!text.trim() && !file) || account?.status !== "connected"}>{sending ? "…" : "Send"}</button>
               </div>
             ) : (
               <div className="waComposer small">Aap ke paas reply ki permission nahi hai (view only).</div>

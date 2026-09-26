@@ -97,6 +97,7 @@ export interface MessageRecord {
   at: string;
   status: string;
   source: "realtime" | "history" | "portal";
+  callStatus?: string;
   createdBy?: string;
 }
 
@@ -152,4 +153,9 @@ export interface CaptureStore {
   /** Login uids in the workspace holding any of the permissions (optionally linked to a team record). */
   listRecipients(ws: string, anyOf: string[], teamId?: string): Promise<string[]>;
   notify(ws: string, userUids: string[], n: NotificationInput): Promise<void>;
+  /**
+   * Adds to the daily counters in users/{ws}/waStats/{YYYY-MM-DD}.
+   * Keys may be dotted (e.g. "byUser.<uid>.sent"); `set` holds plain values.
+   */
+  bumpStats(ws: string, day: string, inc: Record<string, number>, set?: Record<string, unknown>): Promise<void>;
 }

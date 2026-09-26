@@ -38,3 +38,15 @@ describe("phone helpers (same vectors as the portal)", () => {
     expect(jidUser("923451873354:12@s.whatsapp.net")).toBe("923451873354");
   });
 });
+
+import { FieldValue } from "firebase-admin/firestore";
+import { statsDoc } from "../../src/store.js";
+describe("statsDoc", () => {
+  it("nests dotted counters for a merge write", () => {
+    const d = statsDoc("2026-09-26", { inbound: 2, "byUser.u1.sent": 1 }, { "byUser.u1.email": "a@b.pk" }) as any;
+    expect(d.day).toBe("2026-09-26");
+    expect(d.inbound.isEqual(FieldValue.increment(2))).toBe(true);
+    expect(d.byUser.u1.sent.isEqual(FieldValue.increment(1))).toBe(true);
+    expect(d.byUser.u1.email).toBe("a@b.pk");
+  });
+});

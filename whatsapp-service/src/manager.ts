@@ -14,6 +14,7 @@ interface OutboxDoc {
   status: string;
   createdBy: string;
   createdByEmail?: string;
+  media?: { path: string; mimetype?: string; fileName?: string; size?: number };
 }
 
 /**
@@ -95,8 +96,8 @@ export class Manager {
     try {
       if (!conn) throw new Error("WhatsApp account nahi mila");
       const text = String(item.text || "").trim();
-      if (!text) throw new Error("Khali message");
-      const rec = await conn.sendText(item.conversationId, text, { uid: item.createdBy, email: item.createdByEmail });
+      if (!text && !item.media) throw new Error("Khali message");
+      const rec = await conn.sendFromPortal(item.conversationId, text, { uid: item.createdBy, email: item.createdByEmail }, item.media);
       await ref.update({ status: "sent", waMessageId: rec.id, sentAt: rec.at });
       await db.collection("users").doc(ws).collection("auditLogs").doc(`AU-WA-${rec.id}`).set({
         id: `AU-WA-${rec.id}`,
@@ -107,7 +108,7 @@ export class Manager {
         collection: "waConversations",
         entityId: item.conversationId,
         entityLabel: item.conversationId,
-        details: text.slice(0, 200),
+        details: (item.media ? `[${item.media.fileName || "attachment"}] ` : "") + text.slice(0, 200),
       });
     } catch (e) {
       log.warn({ err: e, ws, id }, "outbox send failed");

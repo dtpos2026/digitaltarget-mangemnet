@@ -1,6 +1,7 @@
 import { randomBytes } from "node:crypto";
-import type { Chat, Contact, WAMessage } from "@whiskeysockets/baileys";
+import type { Chat, Contact, WACallEvent, WAMessage } from "@whiskeysockets/baileys";
 import { chatTypeOf, parseMessage, statusLabel, type ParsedMessage } from "./parser.js";
+import { isLidUser, isPnUser, jidNormalizedUser } from "@whiskeysockets/baileys";
 import { formatLocalPhone, jidUser, normalizePhone } from "./phone.js";
 import type {
   AccountSettings,
@@ -132,6 +133,54 @@ export class CapturePipeline {
     }
   }
 
+  /**
+   * Calls ring on the phone (a linked device cannot take them); we log them in
+   * the chat so the inbox and performance numbers include them. A call from a
+   * new number creates a lead like a message does.
+   */
+  async handleCalls(calls: WACallEvent[]) {
+    for (const c of calls) {
+      try {
+        if (c.isGroup) continue;
+        const chatJid = c.chatId || c.from;
+        const alt = c.callerPn;
+        const kindLabel = c.isVideo ? "video call" : "voice call";
+        const p: ParsedMessage = {
+          id: `call_${c.id}`,
+          chatJid,
+          chatType: "user",
+          fromMe: false,
+          senderJid: c.from,
+          timestamp: c.date ? new Date(c.date).getTime() : this.now(),
+          kind: "call",
+          text: `📞 Incoming ${kindLabel}`,
+        };
+        if (isPnUser(chatJid)) p.pnJid = jidNormalizedUser(chatJid);
+        else if (alt) p.pnJid = jidNormalizedUser(alt.includes("@") ? alt : `${alt}@s.whatsapp.net`);
+        if (isLidUser(chatJid)) p.lidJid = jidNormalizedUser(chatJid);
+        if (c.status === "offer") {
+          await this.handleOne(null, p, "realtime");
+          continue;
+        }
+        const ended: Record<string, string> = {
+          timeout: `📵 Missed ${kindLabel}`,
+          reject: `📵 Declined ${kindLabel}`,
+          accept: `📞 Answered ${kindLabel}`,
+        };
+        if (!ended[c.status]) continue;
+        if (!p.pnJid && p.lidJid && this.o.resolvePnForLid) p.pnJid = (await this.o.resolvePnForLid(p.lidJid).catch(() => null)) || undefined;
+        const convId = await this.resolveConversationId(p);
+        await this.store.patchMessage(this.o.ws, convId, p.id, { text: ended[c.status], callStatus: c.status }).catch(() => undefined);
+        await this.store.updateConversationIfExists(this.o.ws, convId, { lastMessageText: ended[c.status] }).catch(() => undefined);
+        if (c.status === "timeout") {
+          await this.store.bumpStats(this.o.ws, localDate(p.timestamp, this.o.timezone), { missedCalls: 1 }).catch(() => undefined);
+        }
+      } catch (e) {
+        this.o.log.error({ err: e, call: c.id }, "call capture failed");
+      }
+    }
+  }
+
   /** Delivery / read receipts and edits for existing messages. */
   async handleUpdates(updates: { key: WAMessage["key"]; update: Partial<WAMessage> }[]) {
     for (const { key, update } of updates) {
@@ -170,7 +219,7 @@ export class CapturePipeline {
     return id;
   }
 
-  private async handleOne(msg: WAMessage, p: ParsedMessage, source: "realtime" | "history") {
+  private async handleOne(msg: WAMessage | null, p: ParsedMessage, source: "realtime" | "history") {
     if (this.skip(p)) return;
     const { ws } = this.o;
 
@@ -231,7 +280,7 @@ export class CapturePipeline {
     await this.store.upsertConversation(ws, convId, patch, unread);
 
     let media: StoredMedia | undefined = p.media;
-    if (p.media && source === "realtime" && this.o.settings().downloadMedia && this.o.storeMedia) {
+    if (msg && p.media && source === "realtime" && this.o.settings().downloadMedia && this.o.storeMedia) {
       media = (await this.o.storeMedia(msg, p, convId).catch((e) => {
         this.o.log.warn({ err: e, id: p.id }, "media download failed");
         return { ...p.media!, skipped: "download failed" };
@@ -260,7 +309,25 @@ export class CapturePipeline {
       record.createdBy = sender.uid;
       if (sender.email) record.senderName = sender.email;
     }
+    if (p.kind === "call") record.callStatus = "offer";
     await this.store.saveMessages(ws, convId, [record]);
+
+    // Daily counters for the Performance page.
+    const inc: Record<string, number> = {};
+    if (p.kind === "call") inc.calls = 1;
+    else if (p.fromMe) {
+      inc.outbound = 1;
+      if (sender) { inc.portalSent = 1; inc[`byUser.${sender.uid}.sent`] = 1; }
+    } else inc.inbound = 1;
+    if (!conv) inc.newConversations = 1;
+    if (patch.firstResponseMs != null) {
+      inc.responses = 1;
+      inc.responseMsTotal = patch.firstResponseMs;
+      if (sender) { inc[`byUser.${sender.uid}.responses`] = 1; inc[`byUser.${sender.uid}.responseMsTotal`] = patch.firstResponseMs; }
+    }
+    await this.store
+      .bumpStats(ws, localDate(p.timestamp, this.o.timezone), inc, sender?.email ? { [`byUser.${sender.uid}.email`]: sender.email } : undefined)
+      .catch((e) => this.o.log.warn({ err: e }, "stats update failed"));
 
     if (p.fromMe || p.chatType !== "user") return;
     const merged: ConversationRecord = { ...(conv || ({} as ConversationRecord)), ...patch } as ConversationRecord;
@@ -329,6 +396,7 @@ export class CapturePipeline {
       return;
     }
     this.o.log.info({ leadId, conversation: conv.id }, "new WhatsApp lead");
+    await this.store.bumpStats(ws, localDate(p.timestamp, this.o.timezone), { newLeads: 1 }).catch(() => undefined);
     if (source !== "realtime" || !settings.notifyOnNewLead) return;
     const uids = await this.store.listRecipients(ws, ["leads.view", "whatsapp.view"]);
     await this.store.notify(ws, uids, {

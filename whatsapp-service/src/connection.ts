@@ -220,6 +220,7 @@ export class AccountConnection {
     sock.ev.on("messages.upsert", ({ messages }) => void this.enqueue(() => this.pipeline.handleMessages(messages, "realtime")));
     sock.ev.on("messages.update", (updates) => void this.enqueue(() => this.pipeline.handleUpdates(updates)));
     sock.ev.on("contacts.upsert", (c) => void this.enqueue(() => this.pipeline.handleContacts(c)));
+    sock.ev.on("call", (calls) => void this.enqueue(() => this.pipeline.handleCalls(calls)));
     sock.ev.on("contacts.update", (c) => void this.enqueue(() => this.pipeline.handleContacts(c)));
   }
 
@@ -323,16 +324,45 @@ export class AccountConnection {
       history: { chats: 0, messages: 0, status: "idle" } });
   }
 
-  /** Sends a text from the portal inbox; returns the stored message record. */
-  async sendText(conversationId: string, text: string, by: { uid: string; email?: string }): Promise<MessageRecord> {
+  /**
+   * Sends a text, or a file uploaded by the portal (caption = text), and
+   * returns the stored message record. Media must live under the workspace's
+   * whatsapp-outbox/ folder so the outbox cannot be used to leak other files.
+   */
+  async sendFromPortal(
+    conversationId: string,
+    text: string,
+    by: { uid: string; email?: string },
+    media?: { path: string; mimetype?: string; fileName?: string; kind?: string; size?: number }
+  ): Promise<MessageRecord> {
     const sock = this.sock;
     if (!sock || this.status !== "connected") throw new Error("WhatsApp connected nahi hai");
     const conv = await this.deps.store.getConversation(this.deps.ws, conversationId);
     if (!conv || conv.accountId !== this.deps.accountId) throw new Error("Conversation nahi mili");
+
+    let content: Parameters<WASocket["sendMessage"]>[1];
+    let kind = "text";
+    if (media) {
+      if (!this.deps.bucket) throw new Error("Storage bucket configured nahi (FIREBASE_STORAGE_BUCKET)");
+      if (!media.path.startsWith(`workspaces/${this.deps.ws}/whatsapp-outbox/`)) throw new Error("Invalid attachment path");
+      const [buf] = await this.deps.bucket.file(media.path).download();
+      if (buf.length > this.deps.cfg.mediaMaxBytes) throw new Error("File bohat bari hai");
+      const mimetype = media.mimetype || "application/octet-stream";
+      kind = mimetype.startsWith("image/") ? "image" : mimetype.startsWith("video/") ? "video" : mimetype.startsWith("audio/") ? "audio" : "document";
+      content =
+        kind === "image" ? { image: buf, caption: text || undefined, mimetype }
+        : kind === "video" ? { video: buf, caption: text || undefined, mimetype }
+        : kind === "audio" ? { audio: buf, mimetype }
+        : { document: buf, mimetype, fileName: media.fileName || "file", caption: text || undefined };
+    } else {
+      if (!text) throw new Error("Khali message");
+      content = { text };
+    }
+
     const wait = this.lastSendAt + this.deps.cfg.sendIntervalMs - Date.now();
     if (wait > 0) await new Promise((r) => setTimeout(r, wait));
     this.lastSendAt = Date.now();
-    const res = await sock.sendMessage(conv.jid, { text });
+    const res = await sock.sendMessage(conv.jid, content);
     if (!res?.key.id) throw new Error("Message send nahi hua");
     this.sent.set(res.key.id, { message: res.message, ...by });
     if (this.sent.size > 500) this.sent.delete(this.sent.keys().next().value as string);
@@ -344,13 +374,14 @@ export class AccountConnection {
       fromMe: true,
       sender: sock.user?.id || "me",
       senderName: by.email,
-      kind: "text",
-      text,
+      kind,
+      text: text || (media ? media.fileName || kind : ""),
       timestamp: now,
       at: new Date(now).toISOString(),
       status: "sent",
       source: "portal",
       createdBy: by.uid,
+      ...(media ? { media: { kind: kind as "image", path: media.path, mimetype: media.mimetype, fileName: media.fileName, size: media.size } } : {}),
     };
     await this.deps.store.saveMessages(this.deps.ws, conversationId, [record]);
     return record;

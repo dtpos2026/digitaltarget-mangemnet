@@ -164,3 +164,32 @@ describe("privacy ids (@lid) and message updates", () => {
     expect(store.notifications[0].n.type).toBe("whatsapp.message");
   });
 });
+
+describe("calls and daily stats", () => {
+  it("logs an incoming call, marks it missed, and creates a lead for a new caller", async () => {
+    const date = new Date(1790000000000);
+    await pipe.handleCalls([{ id: "C1", chatId: CUSTOMER, from: CUSTOMER, date, status: "offer", offline: false }]);
+    await pipe.handleCalls([{ id: "C1", chatId: CUSTOMER, from: CUSTOMER, date, status: "timeout", offline: false }]);
+    const m = store.messages.get("923001234567")!.get("call_C1")!;
+    expect(m).toMatchObject({ kind: "call", text: "📵 Missed voice call", callStatus: "timeout" });
+    expect(store.leads.size).toBe(1);
+    const day = store.stats.get(localDate(date.getTime(), "Asia/Karachi"))!;
+    expect(day).toMatchObject({ calls: 1, missedCalls: 1, newLeads: 1, newConversations: 1 });
+  });
+
+  it("counts inbound, outbound, per-user replies and first-response time", async () => {
+    const sentByPortal = new Set(["R1"]);
+    pipe = new CapturePipeline(store, {
+      ws: "ws1", accountId: "main", settings: () => settings, timezone: "Asia/Karachi", log: silent,
+      portalSender: (id) => (sentByPortal.has(id) ? { uid: "u-sales", email: "s@dt.pk" } : undefined),
+    });
+    await pipe.handleMessages([waMsg({ jid: CUSTOMER, ts: 1790000000, message: { conversation: "hi" } })], "realtime");
+    await pipe.handleMessages([waMsg({ jid: CUSTOMER, id: "R1", fromMe: true, ts: 1790000120, message: { conversation: "Salam!" } })], "realtime");
+    const day = store.stats.get(localDate(1790000000000, "Asia/Karachi"))!;
+    expect(day).toMatchObject({
+      inbound: 1, outbound: 1, portalSent: 1, responses: 1, responseMsTotal: 120000,
+      "byUser.u-sales.sent": 1, "byUser.u-sales.responses": 1, "byUser.u-sales.email": "s@dt.pk",
+    });
+    expect(store.messages.get("923001234567")!.get("R1")).toMatchObject({ source: "portal", createdBy: "u-sales" });
+  });
+});

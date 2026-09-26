@@ -59,6 +59,13 @@ export class FakeStore implements CaptureStore {
   async listRecipients(_ws: string, anyOf: string[], teamId?: string) {
     return this.recipients.filter((r) => r.perms.some((p) => anyOf.includes(p)) && (!teamId || r.teamId === teamId)).map((r) => r.uid);
   }
+  stats = new Map<string, Record<string, unknown>>();
+  async bumpStats(_ws: string, day: string, inc: Record<string, number>, set: Record<string, unknown> = {}) {
+    const d = this.stats.get(day) || {};
+    for (const [k, v] of Object.entries(inc)) d[k] = ((d[k] as number) || 0) + v;
+    Object.assign(d, set);
+    this.stats.set(day, d);
+  }
   async notify(_ws: string, uids: string[], n: NotificationInput) {
     for (const uid of uids) this.notifications.push({ uid, n });
   }

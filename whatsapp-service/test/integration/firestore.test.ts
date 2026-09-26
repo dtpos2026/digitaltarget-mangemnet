@@ -107,6 +107,9 @@ describe("pipeline on Firestore", () => {
     expect(one.get("lastMessageText")).toBe("m270");
     expect((await one.ref.collection("messages").get()).size).toBe(10);
     expect((await db.collection(`users/${WS}/leads`).get()).size).toBe(0);
+    const stats = await db.collection(`users/${WS}/waStats`).get();
+    expect(stats.docs.reduce((n, d) => n + (d.get("inbound") || 0), 0)).toBe(300);
+    expect(stats.docs.reduce((n, d) => n + (d.get("newConversations") || 0), 0)).toBe(30);
   });
 });
 

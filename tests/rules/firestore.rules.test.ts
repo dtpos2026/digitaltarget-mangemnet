@@ -245,6 +245,11 @@ describe("WhatsApp", () => {
     await assertFails(setDoc(wsDoc("sales", "waOutbox/O4"), outbox({ id: "O4", jid: "923009999999@s.whatsapp.net" })));
     await assertFails(setDoc(wsDoc("sales", "waOutbox/O5"), outbox({ id: "O5", text: "" })));
     await assertFails(setDoc(wsDoc("acct", "waOutbox/O6"), outbox({ id: "O6", createdBy: "acct" })));
+    // attachments: own outbox folder only; caption may be empty
+    const media = { path: `workspaces/${WS}/whatsapp-outbox/O7/menu.jpg`, mimetype: "image/jpeg", fileName: "menu.jpg", size: 1000 };
+    await assertSucceeds(setDoc(wsDoc("sales", "waOutbox/O7"), outbox({ id: "O7", text: "", media })));
+    await assertFails(setDoc(wsDoc("sales", "waOutbox/O8"), outbox({ id: "O8", text: "", media: { ...media, path: "workspaces/other/whatsapp-outbox/O8/x.jpg" } })));
+    await assertFails(setDoc(wsDoc("sales", "waOutbox/O9"), outbox({ id: "O9", media: { ...media, path: `workspaces/${WS}/whatsapp/C1/photo.jpg` } })));
   });
 
   it("conversation triage fields are editable, message data is not", async () => {

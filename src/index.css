@@ -724,3 +724,8 @@ th { background: var(--brand-50); color: var(--brand); }
 @media (max-width: 980px) { .appShell { background: var(--bg); } }
 .dark .appShell { background: linear-gradient(to right, #16022B 260px, var(--bg) 260px); }
 td.num, th.num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.waCall { align-self: center; font-size: 12px; background: var(--surface); border: 1px solid var(--border); border-radius: 999px; padding: 4px 12px; color: var(--muted); }
+.waCall.missed { color: #dc2626; border-color: rgba(220,38,38,.3); }
+.waAttach { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; background: var(--brand-50); border-radius: 999px; padding: 4px 10px; white-space: nowrap; max-width: 45%; overflow: hidden; }
+.waComposer { flex-wrap: wrap; }
+.perfCharts { align-items: stretch; } .perfCharts .card { height: 100%; }

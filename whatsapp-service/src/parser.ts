@@ -15,7 +15,7 @@ import {
 
 export type MessageKind =
   | "text" | "image" | "video" | "audio" | "document" | "sticker" | "location"
-  | "contact" | "poll" | "reaction" | "revoke" | "edit" | "other";
+  | "contact" | "poll" | "reaction" | "revoke" | "edit" | "call" | "other";
 
 export type ChatType = "user" | "group" | "status" | "broadcast" | "newsletter";
 

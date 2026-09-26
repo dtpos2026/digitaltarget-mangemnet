@@ -10,7 +10,8 @@ import {
   updateDoc,
   where,
 } from "firebase/firestore";
-import { db } from "@/lib/firebase";
+import { db, storage } from "@/lib/firebase";
+import { ref as storageRef, uploadBytes } from "firebase/storage";
 import { uid } from "@/lib/db";
 
 // Shapes written by whatsapp-service (see whatsapp-service/src/types.ts).
@@ -92,6 +93,7 @@ export interface WaMessage {
   deleted?: boolean;
   edited?: boolean;
   reactions?: Record<string, string | null>;
+  callStatus?: string;
 }
 
 export interface WaOutboxItem {
@@ -99,6 +101,7 @@ export interface WaOutboxItem {
   conversationId: string;
   text: string;
   status: "queued" | "sending" | "sent" | "failed";
+  media?: { fileName?: string };
   error?: string;
   createdAt: string;
 }
@@ -192,7 +195,19 @@ export async function saveAccountSettings(ws: string, accountId: string, setting
   await updateDoc(doc(db, "users", ws, "waAccounts", accountId), { settings, expectedPhone });
 }
 
-export async function queueMessage(ws: string, accountId: string, conversationId: string, text: string, by: { uid: string; email?: string | null }) {
+export interface OutboxMedia { path: string; mimetype: string; fileName: string; size: number }
+
+export const MAX_ATTACHMENT_BYTES = 16 * 1024 * 1024;
+
+/** Uploads a file for sending (storage.rules: whatsapp.reply, < 16 MB, common types). */
+export async function uploadAttachment(ws: string, file: File): Promise<OutboxMedia> {
+  const safe = file.name.replace(/[^\w.-]+/g, "_").slice(-80) || "file";
+  const path = `workspaces/${ws}/whatsapp-outbox/${uid("UP")}/${safe}`;
+  await uploadBytes(storageRef(storage, path), file, { contentType: file.type || "application/octet-stream" });
+  return { path, mimetype: file.type || "application/octet-stream", fileName: file.name, size: file.size };
+}
+
+export async function queueMessage(ws: string, accountId: string, conversationId: string, text: string, by: { uid: string; email?: string | null }, media?: OutboxMedia) {
   const id = uid("OUT");
   await setDoc(doc(db, "users", ws, "waOutbox", id), {
     id,
@@ -203,6 +218,7 @@ export async function queueMessage(ws: string, accountId: string, conversationId
     createdBy: by.uid,
     createdByEmail: by.email || "",
     createdAt: new Date().toISOString(),
+    ...(media ? { media } : {}),
   });
 }
 

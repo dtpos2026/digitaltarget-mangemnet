@@ -24,6 +24,20 @@ export function effectivePermissions(presets: Presets, r: { role?: string; permi
   return new Set(list);
 }
 
+/** Dotted counter keys → nested object of FieldValue.increment (set+merge friendly). */
+export function statsDoc(day: string, inc: Record<string, number>, set: Record<string, unknown> = {}) {
+  const out: Record<string, unknown> = { day, updatedAt: new Date().toISOString() };
+  const put = (path: string, value: unknown) => {
+    const parts = path.split(".");
+    let node = out;
+    for (const part of parts.slice(0, -1)) node = (node[part] ??= {}) as Record<string, unknown>;
+    node[parts[parts.length - 1]] = value;
+  };
+  for (const [k, v] of Object.entries(inc)) put(k, FieldValue.increment(v));
+  for (const [k, v] of Object.entries(set)) put(k, v);
+  return out;
+}
+
 const CONV_CACHE_MS = 30_000;
 const ROLES_CACHE_MS = 60_000;
 const LEADS_CACHE_MS = 5 * 60_000;
@@ -43,6 +57,7 @@ export class FirestoreStore implements CaptureStore {
   private legacyLeads = new Map<string, { at: number; byPhone: Map<string, string> }>();
   private writer: BulkWriter | null = null;
   private pendingConv = new Map<string, { ws: string; id: string; patch: Partial<ConversationRecord>; unread: number }>();
+  private pendingStats = new Map<string, { ws: string; day: string; inc: Record<string, number>; set: Record<string, unknown> }>();
 
   constructor(private readonly db: Firestore, presetsPath: string) {
     this.presets = JSON.parse(readFileSync(presetsPath, "utf8"));
@@ -70,6 +85,10 @@ export class FirestoreStore implements CaptureStore {
         writer.set(this.ws(p.ws).collection("waConversations").doc(p.id), this.convData(p.patch, p.unread), { merge: true });
       }
       this.pendingConv.clear();
+      for (const p of this.pendingStats.values()) {
+        writer.set(this.ws(p.ws).collection("waStats").doc(p.day), statsDoc(p.day, p.inc, p.set), { merge: true });
+      }
+      this.pendingStats.clear();
       await writer.close();
     }
   }
@@ -208,6 +227,19 @@ export class FirestoreStore implements CaptureStore {
     return cached.rows
       .filter((r) => anyOf.some((p) => r.perms.has(p)) && (!teamId || r.teamId === teamId))
       .map((r) => r.uid);
+  }
+
+  async bumpStats(ws: string, day: string, inc: Record<string, number>, set: Record<string, unknown> = {}) {
+    if (!Object.keys(inc).length && !Object.keys(set).length) return;
+    if (this.writer) {
+      const key = `${ws}/${day}`;
+      const cur = this.pendingStats.get(key) || { ws, day, inc: {}, set: {} };
+      for (const [k, v] of Object.entries(inc)) cur.inc[k] = (cur.inc[k] || 0) + v;
+      Object.assign(cur.set, set);
+      this.pendingStats.set(key, cur);
+      return;
+    }
+    await this.ws(ws).collection("waStats").doc(day).set(statsDoc(day, inc, set), { merge: true });
   }
 
   async notify(ws: string, userUids: string[], n: NotificationInput) {

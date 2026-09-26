@@ -41,6 +41,15 @@ service firebase.storage {
       allow write: if false;
     }
 
+    // Files attached from the portal inbox, sent by whatsapp-service.
+    // workspaces/{ws}/whatsapp-outbox/{outboxId}/{file}
+    match /workspaces/{ws}/whatsapp-outbox/{outboxId}/{file} {
+      allow read: if canAny(ws, ['whatsapp.view']);
+      allow create: if canAny(ws, ['whatsapp.reply'])
+        && request.resource.size < 16 * 1024 * 1024
+        && request.resource.contentType.matches('image/.*|video/mp4|audio/.*|application/pdf|application/msword|application/vnd[.]openxmlformats-officedocument[.].*|application/vnd[.]ms-excel|text/plain');
+    }
+
     match /{allPaths=**} {
       allow read, write: if false;
     }

@@ -186,13 +186,20 @@ service cloud.firestore {
       allow read: if member(ws) && canAny(['whatsapp.view']);
       allow create: if member(ws) && canAny(['whatsapp.reply'])
         && request.resource.data.keys().hasOnly(['id', 'accountId', 'conversationId', 'text', 'status',
-                                                 'createdBy', 'createdByEmail', 'createdAt'])
+                                                 'createdBy', 'createdByEmail', 'createdAt', 'media'])
         && request.resource.data.createdBy == request.auth.uid
         && request.resource.data.status == 'queued'
         && request.resource.data.conversationId is string
         && request.resource.data.text is string
-        && request.resource.data.text.size() > 0
-        && request.resource.data.text.size() <= 4096;
+        && request.resource.data.text.size() <= 4096
+        && (request.resource.data.text.size() > 0 || validOutboxMedia(ws))
+        && (!('media' in request.resource.data) || validOutboxMedia(ws));
+    }
+    // Attachments must be files this workspace uploaded to its own outbox folder.
+    function validOutboxMedia(ws) {
+      let m = request.resource.data.media;
+      return m is map && m.keys().hasOnly(['path', 'mimetype', 'fileName', 'size'])
+        && m.path is string && m.path.matches('workspaces/' + ws + '/whatsapp-outbox/[^/]+/[^/]+');
     }
 
     // ---------- notifications (one doc per recipient) ----------
