@@ -6,6 +6,7 @@ import { onNavigate, openWhatsAppWeb } from "@/lib/navigation";
 import ConnectModal from "./ConnectModal";
 import CaptureModal from "./CaptureModal";
 import Inbox from "./Inbox";
+import WaWebView from "./WaWebView";
 import {
   createMainAccount,
   DEFAULT_WA_SETTINGS,
@@ -28,7 +29,10 @@ const STATUS_LABEL: Record<string, { text: string; cls: string }> = {
   error: { text: "Error", cls: "bad" },
 };
 
-export default function WhatsAppTab({ focusConversationId }: { focusConversationId?: string | null }) {
+const VIEW_KEY = "dt.waView";
+type View = "web" | "inbox";
+
+export default function WhatsAppTab({ focusConversationId, openPhone }: { focusConversationId?: string | null; openPhone?: { phone: string; chatId?: string; n: number } | null }) {
   const { workspaceUid, can, user } = useAuth();
   const { data, logAudit } = useData();
   const accounts = useAccounts(workspaceUid);
@@ -40,6 +44,18 @@ export default function WhatsAppTab({ focusConversationId }: { focusConversation
   const [settings, setSettings] = useState<WaSettings>(DEFAULT_WA_SETTINGS);
   const [expected, setExpected] = useState("");
   const canManage = can("whatsapp.manage");
+  const [chosenView, setChosenView] = useState<View | null>(() => {
+    try { const v = localStorage.getItem(VIEW_KEY); return v === "web" || v === "inbox" ? v : null; } catch { return null; }
+  });
+  // WhatsApp Web (browser extension, no server) is the default; the server
+  // inbox is the default only where whatsapp-service has been set up.
+  const view: View = chosenView || (account ? "inbox" : "web");
+  const chooseView = (v: View) => {
+    setChosenView(v);
+    try { localStorage.setItem(VIEW_KEY, v); } catch { /* ignore */ }
+  };
+  useEffect(() => { if (openPhone) setChosenView("web"); }, [openPhone]);
+  useEffect(() => { if (focusConversationId) setChosenView("inbox"); }, [focusConversationId]);
 
   useEffect(() => onNavigate((d) => { if (d.tab === "whatsapp" && d.conversationId) setFocus(d.conversationId); }), []);
   useEffect(() => { if (focusConversationId) setFocus(focusConversationId); }, [focusConversationId]);
@@ -85,11 +101,31 @@ export default function WhatsAppTab({ focusConversationId }: { focusConversation
   const st = STATUS_LABEL[account?.status || "disconnected"] || STATUS_LABEL.disconnected;
   const online = serviceOnline(account);
 
+  const switcher = (
+    <div className="segmented waViewSwitch" role="tablist">
+      <button role="tab" aria-selected={view === "web"} className={view === "web" ? "on" : ""} onClick={() => chooseView("web")}>🟢 WhatsApp Web</button>
+      <button role="tab" aria-selected={view === "inbox"} className={view === "inbox" ? "on" : ""} onClick={() => chooseView("inbox")}>🗂 Server inbox</button>
+    </div>
+  );
+
+  if (view === "web") {
+    return (
+      <section className="card waTab">
+        <div className="waBar">
+          <div className="waBarInfo"><h2 style={{ margin: 0 }}>WhatsApp</h2></div>
+          {switcher}
+        </div>
+        <WaWebView openPhone={openPhone} />
+      </section>
+    );
+  }
+
   return (
     <section className="card waTab">
       <div className="waBar">
         <div className="waBarInfo">
           <h2 style={{ margin: 0 }}>WhatsApp Inbox</h2>
+          <div className="small">Server (whatsapp-service) wala inbox — 24/7 capture ke liye.</div>
           <div className="waBarStatus">
             <span className={`badge ${st.cls}`}>{st.text}</span>
             {account?.me?.phone && <span className="small">{account.me.name ? `${account.me.name} • ` : ""}{formatPhone(account.me.phone)}</span>}
@@ -99,11 +135,12 @@ export default function WhatsAppTab({ focusConversationId }: { focusConversation
           {account?.lastError && account.status !== "connected" && <div className="small waErrText">{account.lastError}</div>}
           {account?.numberMismatch && <div className="small waErrText">{account.lastError}</div>}
         </div>
+        {switcher}
         <div className="waBarActions">
           {can(["leads.create"]) && can("whatsapp.reply") && (
             <button className="btnSolid" onClick={() => setShowCapture(true)} title="Tamam chats se leads banayein">⚡ Capture Leads</button>
           )}
-          <button className="btnSmall waWebLink" onClick={openWhatsAppWeb} title="Seedha WhatsApp Web (alag window)">🟢 WhatsApp Web</button>
+          <button className="btnSmall waWebLink" onClick={() => openWhatsAppWeb(false)} title="Seedha WhatsApp Web (alag window)">🟢 WhatsApp Web</button>
         </div>
         {canManage && (
           <div className="waBarActions">
@@ -129,7 +166,7 @@ export default function WhatsAppTab({ focusConversationId }: { focusConversation
 
       <Inbox ws={workspaceUid} account={account} focusConversationId={focus} />
 
-      {showCapture && workspaceUid && <CaptureModal ws={workspaceUid} onClose={() => setShowCapture(false)} />}
+      {showCapture && workspaceUid && <CaptureModal source={{ kind: "service", ws: workspaceUid }} onClose={() => setShowCapture(false)} />}
 
       {showConnect && (
         <ConnectModal

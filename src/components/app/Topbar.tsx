@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { Menu, MessageCircle, Moon, MoreVertical, Sun, Wifi, WifiOff } from "lucide-react";
 import { serviceOnline, useAccounts } from "@/components/whatsapp/useWhatsApp";
 import { openWhatsAppWeb } from "@/lib/navigation";
+import { useExtensionVersion } from "@/lib/waExtension";
 import { useAuth } from "@/contexts/AuthContext";
 import { useData } from "@/contexts/DataContext";
 import NotificationBell from "./NotificationBell";
@@ -45,10 +46,11 @@ export default function Topbar({ onToggleTheme, dark, title, onMenu }: Props) {
     connected: "WhatsApp Connected", connecting: "WhatsApp connecting…", qr: "WhatsApp: scan QR",
     pairing: "WhatsApp: enter code", disconnected: "WhatsApp disconnected", logged_out: "WhatsApp logged out", error: "WhatsApp error",
   };
-  const waText = !acc ? "WhatsApp not linked"
+  const extVersion = useExtensionVersion();
+  const waText = !acc ? (extVersion ? "WhatsApp Web" : "WhatsApp not linked")
     : acc.status === "connected" && !serviceOnline(acc) ? "WhatsApp service offline"
     : WA_TEXT[acc.status] || `WhatsApp ${acc.status}`;
-  const waCls = acc?.status === "connected" && serviceOnline(acc) ? "ok" : acc ? "warn" : "";
+  const waCls = acc?.status === "connected" && serviceOnline(acc) ? "ok" : acc ? "warn" : extVersion ? "ok" : "";
   const { data, restoreData, resetData } = useData();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -152,7 +154,7 @@ Example: ALL ya 30d ya 3m`, "ALL"
         </div>
         <div className="actions">
           {showWa && (
-            <button className="iconBtn waWebBtn" onClick={openWhatsAppWeb} title="WhatsApp Web kholein" aria-label="Open WhatsApp Web">
+            <button className="iconBtn waWebBtn" onClick={() => openWhatsAppWeb()} title="WhatsApp Web kholein" aria-label="Open WhatsApp Web">
               <MessageCircle size={18} />
             </button>
           )}

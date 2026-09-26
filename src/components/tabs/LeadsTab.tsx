@@ -6,6 +6,7 @@ import { leadPhones, normalizePhone, waLink } from "@/lib/phone";
 import { LEAD_STATUSES } from "@/lib/leads";
 import { linesOf } from "@/lib/catalog";
 import { navigate } from "@/lib/navigation";
+import { extensionVersion } from "@/lib/waExtension";
 import { useAuth } from "@/contexts/AuthContext";
 
 export default function LeadsTab() {
@@ -291,7 +292,9 @@ export default function LeadsTab() {
                     <button className="btnSmall" onClick={() => convertToClient(l)}>→ Client</button>
                     {l.conversationId && can("whatsapp.view")
                       ? <button className="btnSmall" onClick={() => navigate({ tab: "whatsapp", conversationId: l.conversationId })}>💬 Chat</button>
-                      : <button className="btnSmall" onClick={() => sendWhatsApp(l)}>WhatsApp</button>}
+                      : can("whatsapp.view") && (normalizePhone(l.whatsapp || l.phone) || l.waJid) && extensionVersion()
+                        ? <button className="btnSmall" onClick={() => navigate({ tab: "whatsapp", phone: normalizePhone(l.whatsapp || l.phone), chatId: l.waJid || undefined })}>💬 Chat</button>
+                        : <button className="btnSmall" onClick={() => sendWhatsApp(l)}>WhatsApp</button>}
                     <button className="btnSmall" onClick={() => { if (confirm("Delete?")) removeItem("leads", l.id); }}>Delete</button>
                   </td>
                 </tr>

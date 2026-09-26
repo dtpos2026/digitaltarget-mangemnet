@@ -1,4 +1,34 @@
-# WhatsApp Integration (QR / Linked Device)
+# WhatsApp Integration
+
+There are two ways to use WhatsApp in the portal. **Option 1 needs no server** and is the default.
+
+## Option 1 — WhatsApp Web inside the portal (browser extension, no server)
+
+WhatsApp tab → **🟢 WhatsApp Web**. The first time, the page shows a 5-step setup: download the
+extension from the portal, extract it, open `chrome://extensions`, turn on Developer mode, and use Load unpacked
+(details in `chrome-extension/README.md`). After that:
+
+- Real WhatsApp Web opens **inside the portal** (right side). Scan the QR once from the phone
+  (Settings → Linked devices → Link a device); the session stays saved in that browser.
+  If embedding ever fails, **Alag window** opens it in its own window. The same panel keeps working, and
+  WhatsApp Web shows a small Digital Target panel.
+- The left panel (POS style) has these parts:
+  - link status;
+  - **⚡ Capture all chats → leads**, which reads 1:1 chats from the last 30/90/365 days or all of them, optionally skipping saved contacts;
+  - **Current chat**: lead status, service and follow-up date, the "Chat se andaza" suggestion, and Save / Update lead;
+  - **Quick send**: customer number, auto-filled template, picture/file, *Chat kholein* (writes the message into WhatsApp for you to press Send) or **Send**;
+  - **Pending** (unread chats).
+- Leads tab → **💬 Chat** opens that lead's chat in WhatsApp Web.
+- Calls still ring on the phone.
+
+Limits:
+- Capture only happens while a browser with the extension and WhatsApp Web is open.
+- It is unofficial automation, so keep sending human-paced.
+- A WhatsApp Web update can require updating `chrome-extension/vendor/wppconnect-wa.js`.
+- Each team member who handles WhatsApp installs the extension on their computer.
+- **Tested:** the extension, routing, capture, send, the Leads→Chat flow and the standalone panel were tested end-to-end in Chromium against a mock WhatsApp Web page. A real QR scan could not be tested because the build sandbox blocks WhatsApp.
+
+## Option 2 — Server (24/7 capture, QR / linked device)
 
 The portal links **0345-1873354** the way WhatsApp Web does: an admin clicks
 **Connect WhatsApp**, a QR code pops up, and the phone scans it from

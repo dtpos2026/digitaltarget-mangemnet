@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "prebuild": "node scripts/pack-extension.mjs",
     "build": "vite build",
     "build:dev": "vite build --mode development",
     "lint": "eslint .",
@@ -13,7 +14,8 @@
     "test:watch": "vitest",
     "rules:generate": "node scripts/generate-rules.mjs",
     "rules:check": "node scripts/generate-rules.mjs --check",
-    "test:rules": "firebase emulators:exec --project demo-dt --only firestore,storage \"vitest run -c vitest.rules.config.ts\""
+    "test:rules": "firebase emulators:exec --project demo-dt --only firestore,storage \"vitest run -c vitest.rules.config.ts\"",
+    "ext:pack": "node scripts/pack-extension.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",
@@ -85,6 +87,7 @@
     "eslint": "^9.32.0",
     "eslint-plugin-react-hooks": "^5.2.0",
     "eslint-plugin-react-refresh": "^0.4.20",
+    "fflate": "^0.8.3",
     "firebase-tools": "^15.31.0",
     "globals": "^15.15.0",
     "jsdom": "^20.0.3",
