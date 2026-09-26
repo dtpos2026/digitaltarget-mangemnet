@@ -64,3 +64,10 @@ bug fixes listed in the commit history.
 3. Unified tasks + Graphic Design / Video Editing workflows (revisions, files, approvals)
 4. Campaigns / Ads with cost, CPL and attribution; client profile with full history
 6. Reports (CSV / Excel / PDF), global search, router + UI redesign, soft delete everywhere
+
+## Latest increment — WhatsApp Web inside the portal, AI growth analysis, branded reports
+- **WhatsApp Web inside the portal** (no server): `chrome-extension/` + WhatsApp tab → WhatsApp Web. See `docs/WHATSAPP.md`.
+- **AI Growth Analysis** on every module (Dashboard, Leads, WhatsApp, Clients, Projects, Assignments, Invoices, Accounting, Team). It is rule-based, runs in the browser (`src/lib/moduleInsights.ts`), and each point has an action you can turn into a task with **＋ Task**.
+- **Growth Tasks** (Dashboard): *AI se is hafte ka plan banayein* collects the urgent actions from all modules into a to-do list with due dates and weekly progress. Tasks are stored in `settings.growthTasks`.
+- **Branded reports:** every report opens on the Digital Target letterhead (logo, company details, footer). It has **Print / Save PDF, PNG and JPG** buttons, and the image is taken from the same page that prints. The PNG/JPG buttons in the tabs render the same letterhead.
+- **New POS receipt:** logo, services line, invoice/receipt band, items, boxed total, payment method, status, verify QR. The PNG matches the print.

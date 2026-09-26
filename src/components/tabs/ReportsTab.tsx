@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { useData } from "@/contexts/DataContext";
-import { todayISO, fmtMoney, nowText } from "@/lib/db";
-import { writeSafeDocument } from "@/lib/safeHtml";
+import { todayISO, fmtMoney } from "@/lib/db";
+import { printElementHTML } from "@/lib/exportUtils";
 
 export default function ReportsTab() {
   const { data } = useData();
@@ -62,13 +62,8 @@ export default function ReportsTab() {
       const c = data.clients.find(x => x.id === a.clientId);
       return `<tr><td>${a.date}</td><td>${c?.name || ""}</td><td>${a.type}</td><td>${a.category || ""}</td><td>${fmtMoney(a.amount)}</td></tr>`;
     }).join("");
-    const w = window.open("", "_blank");
-    if (!w) return;
-    writeSafeDocument(w, `<html><head><title>Report</title><style>body{font-family:system-ui;padding:14px}table{width:100%;border-collapse:collapse}th,td{border-bottom:1px solid #ccc;padding:8px;text-align:left}th{font-size:11px;text-transform:uppercase}</style></head><body>
-    <h2 style="margin:0">DIGITAL TARGET</h2><div class="small">${getTitle()}</div><hr/>
-    <table><thead><tr><th>Date</th><th>Name</th><th>Type</th><th>Category</th><th>Amount</th></tr></thead><tbody>${rows || "<tr><td colspan='5'>No data</td></tr>"}</tbody></table>
-    <hr/><div>Income: Rs ${fmtMoney(report.income)} | Expense: Rs ${fmtMoney(report.expense)} | Net: Rs ${fmtMoney(report.net)}</div></body></html>`);
-    setTimeout(() => w.print(), 300);
+    printElementHTML(`    <table><thead><tr><th>Date</th><th>Name</th><th>Type</th><th>Category</th><th>Amount</th></tr></thead><tbody>${rows || "<tr><td colspan='5'>No data</td></tr>"}</tbody></table>
+    <hr/><div>Income: Rs ${fmtMoney(report.income)} | Expense: Rs ${fmtMoney(report.expense)} | Net: Rs ${fmtMoney(report.net)}</div>`, getTitle());
   };
 
   const printMasterReport = () => {
@@ -77,13 +72,8 @@ export default function ReportsTab() {
       if (a.type === "IN" && a.category === "Invoice Paid") income += a.amount || 0;
       if (a.type === "OUT") expense += a.amount || 0;
     });
-    const w = window.open("", "_blank");
-    if (!w) return;
-    writeSafeDocument(w, `<html><head><title>Master Summary</title><style>body{font-family:system-ui;padding:14px}</style></head><body>
-    <h2 style="margin:0">DIGITAL TARGET</h2><div style="font-weight:900;margin-top:4px">Master Summary Report</div><div style="font-size:12px;color:#666">Generated: ${nowText()}</div><hr/>
-    <div>Income: Rs ${fmtMoney(income)}</div><div>Expense: Rs ${fmtMoney(expense)}</div><div>Profit: Rs ${fmtMoney(income - expense)}</div><hr/>
-    <div style="font-size:12px">Invoices: ${data.invoices.length} | Clients: ${data.clients.length} | Projects: ${data.projects.length}</div></body></html>`);
-    setTimeout(() => w.print(), 300);
+    printElementHTML(`    <div>Income: Rs ${fmtMoney(income)}</div><div>Expense: Rs ${fmtMoney(expense)}</div><div>Profit: Rs ${fmtMoney(income - expense)}</div><hr/>
+    <div style="font-size:12px">Invoices: ${data.invoices.length} | Clients: ${data.clients.length} | Projects: ${data.projects.length}</div>`, "Master Summary Report");
   };
 
   return (

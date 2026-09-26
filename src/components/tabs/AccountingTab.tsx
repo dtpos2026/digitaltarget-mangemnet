@@ -2,6 +2,8 @@ import React, { useState } from "react";
 import { useData } from "@/contexts/DataContext";
 import { uid, todayISO, fmtMoney } from "@/lib/db";
 import { writeSafeDocument } from "@/lib/safeHtml";
+import ModuleInsights from "@/components/ModuleInsights";
+import { printElementHTML } from "@/lib/exportUtils";
 
 export default function AccountingTab() {
   const { data, addItem, removeItem, updateItem } = useData();
@@ -127,16 +129,12 @@ export default function AccountingTab() {
       const w = data.wallets.find(x => x.id === a.walletId);
       return `<tr><td>${a.date || ""}</td><td>${a.type || ""}</td><td>${c?.name || ""}</td><td>${a.category || ""}</td><td>Rs ${fmtMoney(a.amount || 0)}</td><td>${w?.name || ""}</td><td>${a.desc || ""}</td></tr>`;
     }).join("");
-    const w = window.open("", "_blank");
-    if (!w) return;
-    const logo = data.settings?.logo?.data || "";
-    writeSafeDocument(w, `<html><head><title>Accounting</title><style>body{font-family:system-ui;padding:14px}table{width:100%;border-collapse:collapse}th,td{border-bottom:1px solid #ccc;padding:8px;text-align:left}th{font-size:11px;text-transform:uppercase}.brand{display:flex;gap:10px;align-items:center;border-bottom:2px solid #111;padding-bottom:8px;margin-bottom:10px}.brand img{max-height:50px;max-width:120px;object-fit:contain}</style></head><body>
-    <div class="brand">${logo ? `<img src="${logo}" />` : ""}<div><h2 style="margin:0">DIGITAL TARGET</h2><div style="font-weight:900">Accounting Report</div><div style="font-size:11px;color:#666">${new Date().toLocaleString()}</div></div></div>
-    <table><thead><tr><th>Date</th><th>Type</th><th>Client</th><th>Category</th><th>Amount</th><th>Account</th><th>Description</th></tr></thead><tbody>${rows || "<tr><td colspan='7'>No entries</td></tr>"}</tbody></table></body></html>`);
-    setTimeout(() => w.print(), 300);
+    printElementHTML(`    <table><thead><tr><th>Date</th><th>Type</th><th>Client</th><th>Category</th><th>Amount</th><th>Account</th><th>Description</th></tr></thead><tbody>${rows || "<tr><td colspan='7'>No entries</td></tr>"}</tbody></table>`, "Accounting Report");
   };
 
   return (
+    <>
+      <ModuleInsights module="finance" />
     <section className="card">
       <h2>Accounting (Khata) {editId && <span className="badge warn">Editing</span>}</h2>
       <div className="grid2">
@@ -215,5 +213,6 @@ export default function AccountingTab() {
         </table>
       </div>
     </section>
+    </>
   );
 }

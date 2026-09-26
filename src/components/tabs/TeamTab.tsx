@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { useData } from "@/contexts/DataContext";
 import { uid, todayISO, fmtMoney, humanDuration, fileToBase64 } from "@/lib/db";
 import { printElementHTML } from "@/lib/exportUtils";
+import ModuleInsights from "@/components/ModuleInsights";
 
 function getCertificateTypeLabel(v: string) {
   const map: Record<string, string> = {
@@ -197,13 +198,10 @@ export default function TeamTab() {
       const due = teamDue(t);
       return `<tr><td>${t.name || ""}</td><td>${t.role || ""}</td><td>${t.memberType || "Employee"}</td><td>${t.status || "Active"}</td><td>${fmtMoney(t.rate || 0)}</td><td>${fmtMoney(t.paid || 0)}</td><td>${fmtMoney(due)}</td><td>${t.rating || 0}</td></tr>`;
     }).join("");
-    printElementHTML(`<div style="padding:14px">
-      <h2 style="margin:0">DIGITAL TARGET</h2>
-      <div style="font-weight:900;margin-top:4px">Team Report</div>
-      <hr/>
+    printElementHTML(`<div>
       <table><thead><tr><th>Name</th><th>Role</th><th>Type</th><th>Status</th><th>Total</th><th>Paid</th><th>Due</th><th>Rating</th></tr></thead>
       <tbody>${rows || '<tr><td colspan="8">No team</td></tr>'}</tbody></table>
-    </div>`);
+    </div>`, "Team Report");
   };
 
   const printCertificate = () => {
@@ -272,7 +270,7 @@ export default function TeamTab() {
             <div>${company}</div>
           </div>
         </div>
-      </div>`);
+      </div>`, { title: "Certificate", bare: true });
   };
 
   const printProfile = () => {
@@ -316,10 +314,12 @@ export default function TeamTab() {
       <h3 style="margin-top:14px">Recent Work Logs</h3>
       <table><thead><tr><th>Date</th><th>Type</th><th>Title</th><th>Amount</th><th>Status</th><th>Rating</th></tr></thead>
       <tbody>${logsHTML || '<tr><td colspan="6">No logs</td></tr>'}</tbody></table>
-    </div>`);
+    </div>`, { title: "Team Profile Card", bare: true });
   };
 
   return (
+    <>
+      <ModuleInsights module="team" />
     <section className="card">
       <h2>Team Management</h2>
 
@@ -561,5 +561,6 @@ export default function TeamTab() {
         </div>
       </div>
     </section>
+    </>
   );
 }

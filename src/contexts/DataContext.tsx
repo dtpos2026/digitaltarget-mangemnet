@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { useAuth } from "./AuthContext";
+import { setReportBranding } from "@/lib/exportUtils";
 import {
   AppData,
   AuditEntry,
@@ -93,6 +94,9 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     );
     return () => unsubs.forEach((u) => u());
   }, [workspaceUid, scope]);
+
+  // Company details / logo for the letterhead on every printed / exported report.
+  useEffect(() => setReportBranding(data.settings), [data.settings]);
 
   const logAudit = useCallback(
     (entry: AuditEntry) => {

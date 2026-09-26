@@ -1,13 +1,14 @@
 import React, { useState, useRef } from "react";
 import { useData } from "@/contexts/DataContext";
 import { uid, todayISO, fmtMoney } from "@/lib/db";
-import { saveElementAsImage, printElementHTML } from "@/lib/exportUtils";
+import { saveReportImage, printElementHTML } from "@/lib/exportUtils";
 import { leadPhones, normalizePhone, waLink } from "@/lib/phone";
 import { LEAD_STATUSES } from "@/lib/leads";
 import { linesOf } from "@/lib/catalog";
 import { navigate } from "@/lib/navigation";
 import { extensionVersion } from "@/lib/waExtension";
 import { useAuth } from "@/contexts/AuthContext";
+import ModuleInsights from "@/components/ModuleInsights";
 
 export default function LeadsTab() {
   const { data, addItem, removeItem, updateItem } = useData();
@@ -116,8 +117,7 @@ export default function LeadsTab() {
 
   const sectionRef = useRef<HTMLDivElement>(null);
 
-  const exportLeadsPDF = () => {
-    const logo = data.settings?.logo?.data || "";
+  const buildLeadsHTML = () => {
     let rows = "";
     filtered.slice().reverse().forEach(l => {
       rows += `<tr>
@@ -134,14 +134,6 @@ export default function LeadsTab() {
     });
     const html = `
       <div style="padding:20px">
-        <div style="display:flex;gap:14px;align-items:center;border-bottom:3px solid #111;padding-bottom:10px;margin-bottom:14px">
-          ${logo ? `<img src="${logo}" style="max-height:60px;max-width:140px;object-fit:contain" />` : ""}
-          <div>
-            <h1 style="margin:0;font-size:24px;font-weight:900">DIGITAL TARGET</h1>
-            <div style="font-size:13px;color:#444">📋 Lead Management Report</div>
-            <div style="font-size:11px;color:#666">Generated: ${new Date().toLocaleString()}</div>
-          </div>
-        </div>
         <div style="display:flex;gap:12px;margin-bottom:16px">
           <div class="card" style="flex:1;text-align:center"><div style="font-size:11px;color:#888">Total</div><div style="font-size:22px;font-weight:900">${total}</div></div>
           <div class="card" style="flex:1;text-align:center"><div style="font-size:11px;color:#888">Active Pipeline</div><div style="font-size:22px;font-weight:900">${interested}</div></div>
@@ -149,19 +141,19 @@ export default function LeadsTab() {
           <div class="card" style="flex:1;text-align:center"><div style="font-size:11px;color:#888">Meetings Today</div><div style="font-size:22px;font-weight:900">${meetingsToday}</div></div>
         </div>
         <table><thead><tr><th>Name</th><th>Phone</th><th>Category</th><th>Service</th><th>Status</th><th>Source</th><th>Meeting</th><th>Follow-up</th><th>Added</th></tr></thead><tbody>${rows}</tbody></table>
-        <div style="margin-top:14px;font-size:11px;color:#666;text-align:center;border-top:1px solid #ccc;padding-top:8px">
-          ${data.settings?.footer || "Digital Target — Business Management"}
-        </div>
       </div>`;
-    printElementHTML(html);
+    return html;
   };
+  const leadsReport = { title: "Leads Report", subtitle: `${filtered.length} leads`, landscape: true, filename: `Leads_Report_${todayISO()}` };
+  const exportLeadsPDF = () => printElementHTML(buildLeadsHTML(), leadsReport);
 
   const exportLeadsImage = (fmt: "png"|"jpg") => {
-    if (!sectionRef.current) return;
-    saveElementAsImage(sectionRef.current, fmt, `Leads_Report_${todayISO()}`, { width: "1200px" });
+    saveReportImage(buildLeadsHTML(), fmt, leadsReport);
   };
 
   return (
+    <>
+      <ModuleInsights module="leads" />
     <section className="card" ref={sectionRef}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
         <div>
@@ -304,5 +296,6 @@ export default function LeadsTab() {
         </table>
       </div>
     </section>
+    </>
   );
 }

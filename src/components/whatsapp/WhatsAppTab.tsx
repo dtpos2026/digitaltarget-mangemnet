@@ -7,6 +7,7 @@ import ConnectModal from "./ConnectModal";
 import CaptureModal from "./CaptureModal";
 import Inbox from "./Inbox";
 import WaWebView from "./WaWebView";
+import ModuleInsights from "@/components/ModuleInsights";
 import {
   createMainAccount,
   DEFAULT_WA_SETTINGS,
@@ -110,6 +111,8 @@ export default function WhatsAppTab({ focusConversationId, openPhone }: { focusC
 
   if (view === "web") {
     return (
+      <>
+      <ModuleInsights module="whatsapp" limit={3} />
       <section className="card waTab">
         <div className="waBar">
           <div className="waBarInfo"><h2 style={{ margin: 0 }}>WhatsApp</h2></div>
@@ -117,10 +120,13 @@ export default function WhatsAppTab({ focusConversationId, openPhone }: { focusC
         </div>
         <WaWebView openPhone={openPhone} />
       </section>
+      </>
     );
   }
 
   return (
+    <>
+    <ModuleInsights module="whatsapp" limit={3} />
     <section className="card waTab">
       <div className="waBar">
         <div className="waBarInfo">
@@ -217,5 +223,6 @@ export default function WhatsAppTab({ focusConversationId, openPhone }: { focusC
         </div>
       )}
     </section>
+    </>
   );
 }

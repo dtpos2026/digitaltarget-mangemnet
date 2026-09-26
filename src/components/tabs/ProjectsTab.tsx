@@ -1,7 +1,8 @@
 import React, { useState } from "react";
 import { useData } from "@/contexts/DataContext";
 import { uid, todayISO, fmtMoney, dtLocalNowValue, normalizeDT, parseDT, fmtDTShort, durationText, isLateProject } from "@/lib/db";
-import { writeSafeDocument } from "@/lib/safeHtml";
+import ModuleInsights from "@/components/ModuleInsights";
+import { printElementHTML } from "@/lib/exportUtils";
 
 export default function ProjectsTab() {
   const { data, addItem, removeItem, updateItem } = useData();
@@ -62,12 +63,7 @@ export default function ProjectsTab() {
       const c = data.clients.find(x => x.id === p.clientId);
       return `<tr><td>${c?.name || ""}</td><td>${p.title || ""}</td><td>${p.category || ""}</td><td>${p.status || ""}</td><td>Rs ${fmtMoney(p.budget || 0)}</td></tr>`;
     }).join("");
-    const w = window.open("", "_blank");
-    if (!w) return;
-    writeSafeDocument(w, `<html><head><title>Projects</title><style>body{font-family:system-ui;padding:14px}table{width:100%;border-collapse:collapse}th,td{border-bottom:1px solid #ccc;padding:8px;text-align:left}th{font-size:11px;text-transform:uppercase}</style></head><body>
-    <h2 style="margin:0">DIGITAL TARGET</h2><div style="font-weight:900;margin-top:4px">Projects Report</div><hr/>
-    <table><thead><tr><th>Client</th><th>Title</th><th>Category</th><th>Status</th><th>Budget</th></tr></thead><tbody>${rows || "<tr><td colspan='5'>No projects</td></tr>"}</tbody></table></body></html>`);
-    setTimeout(() => w.print(), 300);
+    printElementHTML(`    <table><thead><tr><th>Client</th><th>Title</th><th>Category</th><th>Status</th><th>Budget</th></tr></thead><tbody>${rows || "<tr><td colspan='5'>No projects</td></tr>"}</tbody></table>`, "Projects Report");
   };
 
   const renderCalendar = () => {
@@ -152,6 +148,8 @@ export default function ProjectsTab() {
   };
 
   return (
+    <>
+      <ModuleInsights module="projects" />
     <section className="card">
       <h2>Projects</h2>
       <div className="grid2">
@@ -221,5 +219,6 @@ export default function ProjectsTab() {
       {view === "calendar" && renderCalendar()}
       {view === "timeline" && renderTimeline()}
     </section>
+    </>
   );
 }

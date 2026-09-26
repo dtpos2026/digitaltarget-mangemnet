@@ -3,6 +3,7 @@ import { useData } from "@/contexts/DataContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { uid, todayISO, fmtMoney } from "@/lib/db";
 import { saveElementAsImage } from "@/lib/exportUtils";
+import ModuleInsights from "@/components/ModuleInsights";
 
 const STATUS_OPTIONS = ["Assigned", "In Progress", "Submitted", "Revision", "Completed", "Cancelled"];
 
@@ -80,6 +81,7 @@ export default function AssignmentsTab() {
 
   return (
     <>
+      <ModuleInsights module="assignments" />
       <section className="card">
         <h2>Assign Work to Team Member</h2>
         <div className="grid3">

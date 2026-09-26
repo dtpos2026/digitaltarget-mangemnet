@@ -15,6 +15,8 @@ import {
 import { InvoiceA4, InvoicePOS } from "@/components/invoices/InvoiceTemplates";
 import { newVerifyToken, publishVerification, verifyUrl } from "@/lib/invoiceVerify";
 import { linesOf, servicesOf } from "@/lib/catalog";
+import ModuleInsights from "@/components/ModuleInsights";
+import { printElementHTML } from "@/lib/exportUtils";
 
 const emptyItem = (): InvoiceItem => ({ desc: "", qty: 1, price: 0, total: 0 });
 
@@ -315,12 +317,7 @@ export default function InvoicesTab() {
       const v = invoiceView(inv);
       return `<tr><td>${v.number}</td><td>${clientOf(inv.clientId)?.name || ""}</td><td>${v.date}</td><td>${v.status}</td><td>Rs ${fmtMoney(v.grandTotal)}</td><td>Rs ${fmtMoney(v.paid)}</td><td>Rs ${fmtMoney(v.due)}</td></tr>`;
     }).join("");
-    const w = window.open("", "_blank");
-    if (!w) return;
-    writeSafeDocument(w, `<html><head><title>Invoices</title><style>body{font-family:Inter,Arial,sans-serif;padding:18px;color:#1F1633}h2{color:#3D096D;margin:0}table{width:100%;border-collapse:collapse;margin-top:12px}th{background:#3D096D;color:#fff;text-align:left;padding:8px;font-size:11px}td{border-bottom:1px solid #eee;padding:8px;font-size:12px}</style></head><body>
-      <h2>DIGITAL TARGET — Invoices Report</h2><div style="font-size:12px;color:#666">Generated ${nowText()}</div>
-      <table><thead><tr><th>Invoice</th><th>Client</th><th>Date</th><th>Status</th><th>Total</th><th>Paid</th><th>Balance</th></tr></thead><tbody>${rows || "<tr><td colspan=7>No invoices</td></tr>"}</tbody></table></body></html>`);
-    setTimeout(() => w.print(), 300);
+    printElementHTML(`      <table><thead><tr><th>Invoice</th><th>Client</th><th>Date</th><th>Status</th><th>Total</th><th>Paid</th><th>Balance</th></tr></thead><tbody>${rows || "<tr><td colspan=7>No invoices</td></tr>"}</tbody></table>`, "Invoices Report");
   };
 
   // ---------- list ----------
@@ -340,6 +337,7 @@ export default function InvoicesTab() {
 
   return (
     <>
+      <ModuleInsights module="invoices" />
       <section className="card">
         <div className="sectionHead">
           <div>

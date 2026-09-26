@@ -1,7 +1,7 @@
 import React, { useState, useRef } from "react";
 import { useData } from "@/contexts/DataContext";
 import { fmtMoney } from "@/lib/db";
-import { saveElementAsImage, printElementHTML } from "@/lib/exportUtils";
+import { saveReportImage, printElementHTML } from "@/lib/exportUtils";
 import GrowthAnalysis from "@/components/GrowthAnalysis";
 
 export default function BudgetTab() {
@@ -122,7 +122,7 @@ export default function BudgetTab() {
 
   const sectionRef = useRef<HTMLDivElement>(null);
 
-  const exportBudgetPDF = () => {
+  const buildBudgetHTML = () => {
     let catRows = "";
     Array.from(allCats).forEach(c => {
       const b = data.budgets.find((x: any) => x.category === c);
@@ -139,8 +139,6 @@ export default function BudgetTab() {
     });
     const html = `
       <div style="padding:20px">
-        <h1 style="margin:0;font-size:22px;font-weight:900">💰 Budget & Savings Report</h1>
-        <div style="font-size:12px;color:#666;margin:4px 0 16px">Digital Target — Generated: ${new Date().toLocaleDateString()}</div>
         <div style="display:flex;gap:16px;margin-bottom:16px">
           <div class="card" style="flex:1;text-align:center"><div style="font-size:12px;color:#888">Monthly Income</div><div style="font-size:20px;font-weight:900">Rs ${fmtMoney(monthIncome)}</div></div>
           <div class="card" style="flex:1;text-align:center"><div style="font-size:12px;color:#888">Monthly Expense</div><div style="font-size:20px;font-weight:900">Rs ${fmtMoney(monthExpense)}</div></div>
@@ -151,14 +149,11 @@ export default function BudgetTab() {
         <h3 style="margin-top:20px">Monthly Savings History</h3>
         <table><thead><tr><th>Month</th><th>Income</th><th>Expense</th><th>Savings</th><th>Savings %</th><th>Target Met</th></tr></thead><tbody>${savRows}</tbody></table>
       </div>`;
-    printElementHTML(html);
+    return html;
   };
-
-  const exportBudgetImage = (fmt: "png"|"jpg") => {
-    if (!sectionRef.current) return;
-    const today = new Date().toISOString().slice(0, 10);
-    saveElementAsImage(sectionRef.current, fmt, `Budget_Report_${today}`, { width: "1200px" });
-  };
+  const budgetReport = { title: "Budget & Savings Report", filename: `Budget_Report_${new Date().toISOString().slice(0, 10)}` };
+  const exportBudgetPDF = () => printElementHTML(buildBudgetHTML(), budgetReport);
+  const exportBudgetImage = (fmt: "png"|"jpg") => saveReportImage(buildBudgetHTML(), fmt, budgetReport);
 
   return (
     <>

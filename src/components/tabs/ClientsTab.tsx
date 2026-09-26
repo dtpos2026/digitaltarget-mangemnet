@@ -1,11 +1,12 @@
 import React, { useMemo, useState } from "react";
 import { useData } from "@/contexts/DataContext";
 import { useAuth } from "@/contexts/AuthContext";
-import { uid, fmtMoney, nowText } from "@/lib/db";
-import { writeSafeDocument } from "@/lib/safeHtml";
+import { uid, fmtMoney } from "@/lib/db";
 import { invoiceView, statusClass } from "@/lib/invoice";
 import { leadPhones, normalizePhone, waLink } from "@/lib/phone";
 import { navigate } from "@/lib/navigation";
+import ModuleInsights from "@/components/ModuleInsights";
+import { printElementHTML } from "@/lib/exportUtils";
 
 interface ClientForm { name: string; business: string; phone: string; email: string; address: string; services: string; ref: string; status: string }
 const EMPTY: ClientForm = { name: "", business: "", phone: "", email: "", address: "", services: "", ref: "", status: "Active" };
@@ -76,10 +77,7 @@ export default function ClientsTab() {
 
   const exportList = () => {
     const rows = list.map((c: any) => { const s = stats[c.id]; return `<tr><td>${c.name}</td><td>${c.business || ""}</td><td>${c.phone || ""}</td><td>${c.status || ""}</td><td>Rs ${fmtMoney(s?.billed || 0)}</td><td>Rs ${fmtMoney(s?.due || 0)}</td></tr>`; }).join("");
-    const w = window.open("", "_blank");
-    if (!w) return;
-    writeSafeDocument(w, `<html><head><title>Clients</title><style>body{font-family:Inter,Arial,sans-serif;padding:18px;color:#1F1633}h2{color:#3D096D;margin:0}table{width:100%;border-collapse:collapse;margin-top:12px}th{background:#3D096D;color:#fff;text-align:left;padding:8px;font-size:11px}td{border-bottom:1px solid #eee;padding:8px;font-size:12px}</style></head><body><h2>DIGITAL TARGET — Clients</h2><div style="font-size:12px;color:#666">Generated ${nowText()}</div><table><thead><tr><th>Name</th><th>Business</th><th>Phone</th><th>Status</th><th>Billed</th><th>Due</th></tr></thead><tbody>${rows || "<tr><td colspan=6>No clients</td></tr>"}</tbody></table></body></html>`);
-    setTimeout(() => w.print(), 300);
+    printElementHTML(`<table><thead><tr><th>Name</th><th>Business</th><th>Phone</th><th>Status</th><th>Billed</th><th>Due</th></tr></thead><tbody>${rows || "<tr><td colspan=6>No clients</td></tr>"}</tbody></table>`, "Clients Report");
   };
 
   const profile = data.clients.find((c: any) => c.id === profileId);
@@ -89,6 +87,7 @@ export default function ClientsTab() {
 
   return (
     <>
+      <ModuleInsights module="clients" />
       <section className="card">
         <div className="sectionHead">
           <div>

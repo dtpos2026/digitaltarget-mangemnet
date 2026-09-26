@@ -1,7 +1,27 @@
 import React from "react";
 import { fmtMoney } from "@/lib/db";
 import { invoiceView } from "@/lib/invoice";
-import { BrandMark } from "@/components/app/BrandMark";
+
+// The mark as a PNG drawn on a canvas: html2canvas (PNG / JPG / PDF export)
+// does not reliably draw SVG or CSS triangles, but it always draws images.
+const markCache = new Map<string, string>();
+function markPng(color: string): string {
+  if (markCache.has(color)) return markCache.get(color)!;
+  const c = document.createElement("canvas");
+  c.width = c.height = 128;
+  const g = c.getContext("2d");
+  if (!g) return "";
+  g.fillStyle = color;
+  for (const [x, y] of [[0, 0], [64, 0], [0, 64], [64, 64]]) {
+    g.beginPath(); g.moveTo(x, y); g.lineTo(x + 64, y); g.lineTo(x + 64, y + 64); g.closePath(); g.fill();
+  }
+  const url = c.toDataURL("image/png");
+  markCache.set(color, url);
+  return url;
+}
+function Mark({ size, color }: { size: number; color: string }) {
+  return <img src={markPng(color)} width={size} height={size} alt="" style={{ display: "block", width: size, height: size }} />;
+}
 
 // Inline styles only: the same markup is printed (sanitised copy in a popup)
 // and rasterised to PDF / PNG, so it cannot depend on the app stylesheet.
@@ -27,7 +47,7 @@ function Logo({ settings, size = 46 }: { settings: any; size?: number }) {
   }
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 10, color: "#fff" }}>
-      <BrandMark size={size} color="#fff" />
+      <Mark size={size} color="#fff" />
       <div style={{ fontFamily: "Poppins, Inter, Arial, sans-serif", fontWeight: 800, fontSize: size * 0.4, lineHeight: 1.02, letterSpacing: 1 }}>
         DIGITAL<br />TARGET
       </div>
@@ -180,40 +200,63 @@ export function InvoiceA4({ inv, client, project, settings, qr }: Props) {
 
 export function InvoicePOS({ inv, client, project, settings, qr }: Props) {
   const v = invoiceView(inv);
+  const company = settings?.companyName || "Digital Target";
   const line: React.CSSProperties = { display: "flex", justifyContent: "space-between", gap: 8 };
+  const dash: React.CSSProperties = { borderTop: "1px dashed #555", margin: "7px 0" };
+  const small: React.CSSProperties = { fontSize: 9.5, color: "#444" };
+  const contact = [settings?.phone, settings?.companyWebsite || settings?.companyEmail].filter(Boolean).join(" • ");
   return (
-    <div style={{ width: "80mm", padding: "5mm 4mm", background: "#fff", color: "#000", fontFamily: "Inter, Arial, sans-serif", fontSize: 11 }}>
+    <div style={{ width: "80mm", padding: "5mm 4.5mm 6mm", background: "#fff", color: "#000", fontFamily: "Inter, 'Segoe UI', Arial, sans-serif", fontSize: 11, lineHeight: 1.45, letterSpacing: 0, boxSizing: "border-box" }}>
       <div style={{ textAlign: "center" }}>
         {settings?.logo?.data
-          ? <img src={settings.logo.data} alt="logo" style={{ maxWidth: "36mm", maxHeight: "14mm", objectFit: "contain" }} />
-          : <div style={{ display: "inline-flex", alignItems: "center", gap: 6, color: BRAND }}><BrandMark size={22} color={BRAND} /><b style={{ fontSize: 13, letterSpacing: 1 }}>DIGITAL TARGET</b></div>}
-        <div style={{ fontSize: 10, color: "#555", marginTop: 3 }}>{settings?.phone || ""}</div>
+          ? <img src={settings.logo.data} alt="logo" style={{ maxWidth: "40mm", maxHeight: "16mm", objectFit: "contain" }} />
+          : <div style={{ display: "flex", margin: "0 auto", width: 38, height: 38, borderRadius: 10, background: BRAND, alignItems: "center", justifyContent: "center", WebkitPrintColorAdjust: "exact", printColorAdjust: "exact" } as React.CSSProperties}><Mark size={24} color="#fff" /></div>}
+        <div style={{ fontWeight: 900, fontSize: 14, letterSpacing: 1.5, marginTop: 4, textTransform: "uppercase" }}>{company}</div>
+        <div style={{ ...small, fontWeight: 600 }}>AI Software • Digital Marketing • Social Media</div>
+        {settings?.companyAddress && <div style={small}>{settings.companyAddress}</div>}
+        {contact && <div style={small}>{contact}</div>}
       </div>
-      <div style={{ borderTop: `2px solid ${BRAND}`, margin: "6px 0" }} />
-      <div style={{ lineHeight: 1.6 }}>
-        <div style={line}><span>Invoice</span><b>{v.number}</b></div>
+      <div style={{ margin: "8px 0 6px", background: BRAND, color: "#fff", textAlign: "center", fontWeight: 800, letterSpacing: 2, fontSize: 11, padding: "4px 0", borderRadius: 4, WebkitPrintColorAdjust: "exact", printColorAdjust: "exact" } as React.CSSProperties}>
+        {v.status === "Paid" ? "PAYMENT RECEIPT" : "INVOICE"}
+      </div>
+      <div>
+        <div style={line}><span>Invoice #</span><b>{v.number}</b></div>
         <div style={line}><span>Date</span><span>{v.date}</span></div>
-        <div style={line}><span>Client</span><b>{client?.name || ""}</b></div>
-        {project?.title && <div style={line}><span>Project</span><span>{project.title}</span></div>}
+        {inv.dueDate && v.due > 0 && <div style={line}><span>Due date</span><span>{inv.dueDate}</span></div>}
+        <div style={line}><span>Client</span><b style={{ textAlign: "right" }}>{client?.name || ""}</b></div>
+        {client?.phone && <div style={line}><span>Phone</span><span>{client.phone}</span></div>}
+        {project?.title && <div style={line}><span>Project</span><span style={{ textAlign: "right" }}>{project.title}</span></div>}
+        {inv.category && <div style={line}><span>Category</span><span style={{ textAlign: "right" }}>{inv.category}</span></div>}
       </div>
-      <div style={{ borderTop: "1px dashed #999", margin: "6px 0" }} />
+      <div style={dash} />
+      <div style={{ ...line, fontSize: 9.5, fontWeight: 800, letterSpacing: 0.8, textTransform: "uppercase" }}><span>Item</span><span>Amount</span></div>
+      <div style={{ borderTop: "1px solid #000", margin: "3px 0 4px" }} />
       {v.items.map((it, i) => (
-        <div key={i} style={{ padding: "3px 0" }}>
-          <div style={{ fontWeight: 600 }}>{it.desc}</div>
-          <div style={line}><span style={{ color: "#555" }}>{it.qty} × {fmtMoney(it.price)}</span><b>{fmtMoney(it.total)}</b></div>
+        <div key={i} style={{ padding: "2px 0 4px" }}>
+          <div style={{ fontWeight: 700 }}>{it.desc}</div>
+          <div style={line}><span style={{ color: "#444" }}>{it.qty} × Rs {fmtMoney(it.price)}</span><b>{fmtMoney(it.total)}</b></div>
         </div>
       ))}
-      <div style={{ borderTop: "1px dashed #999", margin: "6px 0" }} />
+      <div style={dash} />
       <div style={line}><span>Subtotal</span><span>{fmtMoney(v.subtotal)}</span></div>
       {v.discountAmount > 0 && <div style={line}><span>{v.discountLabel}</span><span>-{fmtMoney(v.discountAmount)}</span></div>}
       {v.taxAmount > 0 && <div style={line}><span>Tax ({v.taxRate}%)</span><span>{fmtMoney(v.taxAmount)}</span></div>}
-      <div style={{ ...line, background: BRAND, color: "#fff", padding: "4px 6px", borderRadius: 4, margin: "4px 0", fontSize: 13, fontWeight: 800 }}><span>TOTAL</span><span>Rs {fmtMoney(v.grandTotal)}</span></div>
-      <div style={line}><span>Paid</span><span>{fmtMoney(v.paid)}</span></div>
-      <div style={{ ...line, fontWeight: 800 }}><span>Balance</span><span>{fmtMoney(v.due)}</span></div>
-      <div style={{ ...line, marginTop: 4 }}><span>Status</span><b>{v.status}</b></div>
-      {qr && <div style={{ textAlign: "center", marginTop: 6 }}><img src={qr} alt="qr" style={{ width: 100, height: 100 }} /><div style={{ fontSize: 9, color: "#777" }}>Scan to verify</div></div>}
-      <div style={{ textAlign: "center", marginTop: 6, fontWeight: 800, color: BRAND }}>Thank you!</div>
-      <div style={{ textAlign: "center", fontSize: 9, color: "#666" }}>{settings?.footer || "Digital Target"}</div>
+      <div style={{ ...line, border: "2px solid #000", padding: "5px 6px", borderRadius: 4, margin: "6px 0", fontSize: 14, fontWeight: 900 }}><span>TOTAL</span><span>Rs {fmtMoney(v.grandTotal)}</span></div>
+      <div style={line}><span>Paid{inv.paymentMethod ? ` (${inv.paymentMethod})` : ""}</span><span>{fmtMoney(v.paid)}</span></div>
+      <div style={{ ...line, fontWeight: 800 }}><span>Balance</span><span>Rs {fmtMoney(v.due)}</span></div>
+      <div style={{ textAlign: "center", margin: "7px 0 2px" }}>
+        <span style={{ display: "inline-block", border: "1.5px solid #000", borderRadius: 999, padding: "1px 10px", fontWeight: 800, fontSize: 10, letterSpacing: 1 }}>{v.status.toUpperCase()}</span>
+      </div>
+      {qr && (
+        <div style={{ textAlign: "center", marginTop: 6 }}>
+          <img src={qr} alt="Verification QR" style={{ width: 96, height: 96 }} />
+          <div style={{ fontSize: 9, fontWeight: 700 }}>Scan to verify this receipt</div>
+        </div>
+      )}
+      <div style={dash} />
+      <div style={{ textAlign: "center", fontWeight: 900, fontSize: 12 }}>Shukriya! Thank you</div>
+      <div style={{ textAlign: "center", ...small }}>{settings?.footer || "Aap ki growth, hamara target."}</div>
+      <div style={{ textAlign: "center", fontSize: 8.5, color: "#666", marginTop: 4 }}>Powered by Digital Target Portal</div>
     </div>
   );
 }

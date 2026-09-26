@@ -1,9 +1,10 @@
 import React, { useRef, useEffect, useCallback } from "react";
 import { useData } from "@/contexts/DataContext";
 import { useAuth } from "@/contexts/AuthContext";
-import { fmtMoney, todayISO, nowText } from "@/lib/db";
-import { saveElementAsImage, printElementHTML } from "@/lib/exportUtils";
-import { sanitizeHtml } from "@/lib/safeHtml";
+import { fmtMoney, todayISO } from "@/lib/db";
+import { saveReportImage, printElementHTML } from "@/lib/exportUtils";
+import ModuleInsights from "@/components/ModuleInsights";
+import GrowthTasks from "@/components/GrowthTasks";
 
 function useChart(drawFn: (canvas: HTMLCanvasElement) => void) {
   const ref = useRef<HTMLCanvasElement>(null);
@@ -191,11 +192,7 @@ export default function DashboardTab() {
       return `<tr><td>${inv.id}</td><td>${c?.name || ""}</td><td>Rs ${fmtMoney(due)}</td><td>${inv.status || ""}</td></tr>`;
     }).join("");
 
-    return `<div style="padding:14px">
-      <h2 style="margin:0">DIGITAL TARGET</h2>
-      <div style="font-weight:900;margin-top:4px">Dashboard Report</div>
-      <div style="font-size:12px;color:#64748b">Generated: ${nowText()}</div>
-      <hr/>
+    return `<div>
       <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">
         <div style="border:1px solid #e6eaf2;border-radius:12px;padding:10px"><b>Income:</b> Rs ${fmtMoney(income)}</div>
         <div style="border:1px solid #e6eaf2;border-radius:12px;padding:10px"><b>Expense:</b> Rs ${fmtMoney(expense)}</div>
@@ -217,26 +214,14 @@ export default function DashboardTab() {
     </div>`;
   };
 
-  const exportDashboardPDF = () => {
-    printElementHTML(buildDashboardHTML());
-  };
-
-  const exportDashboardImage = async (fmt: "png" | "jpg") => {
-    // Create a temporary div with the dashboard report HTML
-    const tempDiv = document.createElement("div");
-    tempDiv.innerHTML = sanitizeHtml(buildDashboardHTML());
-    tempDiv.style.position = "absolute";
-    tempDiv.style.left = "-9999px";
-    tempDiv.style.background = "#fff";
-    tempDiv.style.color = "#000";
-    tempDiv.style.width = "800px";
-    document.body.appendChild(tempDiv);
-    
-    await saveElementAsImage(tempDiv, fmt, "dashboard");
-    document.body.removeChild(tempDiv);
-  };
+  const dashReport = { title: "Dashboard Report", filename: `Dashboard_${todayISO()}` };
+  const exportDashboardPDF = () => printElementHTML(buildDashboardHTML(), dashReport);
+  const exportDashboardImage = (fmt: "png" | "jpg") => saveReportImage(buildDashboardHTML(), fmt, dashReport);
 
   return (
+    <>
+      <ModuleInsights module="dashboard" />
+      <GrowthTasks />
     <section className="card" ref={dashRef}>
       <h2>Manager Dashboard</h2>
 
@@ -375,5 +360,6 @@ export default function DashboardTab() {
         </div>
       </div>
     </section>
+    </>
   );
 }
