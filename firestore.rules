@@ -216,6 +216,22 @@ service cloud.firestore {
       allow create: if member(ws) && request.resource.data.actorUid == request.auth.uid;
     }
 
+    // ---------- public invoice verification (QR on invoices) ----------
+    // Anyone holding the random 32-hex token may read that one summary (no
+    // listing). Only invoice managers of the owning workspace can write it.
+    match /invoiceVerify/{token} {
+      allow get: if true;
+      allow list: if false;
+      allow create: if canAny(['invoices.manage'])
+        && request.resource.data.workspaceUid == me().workspaceUid
+        && request.resource.data.token == token;
+      allow update: if canAny(['invoices.manage'])
+        && resource.data.workspaceUid == me().workspaceUid
+        && request.resource.data.workspaceUid == me().workspaceUid
+        && request.resource.data.token == token;
+      allow delete: if false;
+    }
+
     // waSessions/** and anything not matched above: no client access.
   }
 }

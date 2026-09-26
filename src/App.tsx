@@ -2,6 +2,7 @@ import { BrandMark } from "@/components/app/BrandMark";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { DataProvider } from "@/contexts/DataContext";
 import Login from "@/pages/Login";
+import VerifyPage from "@/pages/VerifyPage";
 import MainApp from "@/pages/MainApp";
 
 const ACCESS_MESSAGES = {
@@ -47,10 +48,15 @@ function AppContent() {
   );
 }
 
-const App = () => (
-  <AuthProvider>
-    <AppContent />
-  </AuthProvider>
-);
+const App = () => {
+  // Public invoice verification (QR code on invoices) — no login.
+  const verify = window.location.pathname.match(/^\/verify\/([A-Za-z0-9]+)\/?$/);
+  if (verify) return <VerifyPage token={verify[1]} />;
+  return (
+    <AuthProvider>
+      <AppContent />
+    </AuthProvider>
+  );
+};
 
 export default App;

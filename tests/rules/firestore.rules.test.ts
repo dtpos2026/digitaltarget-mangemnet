@@ -265,6 +265,23 @@ describe("WhatsApp", () => {
   });
 });
 
+describe("public invoice verification", () => {
+  const T = "0123456789abcdef0123456789abcdef";
+  const summary = (ws = WS) => ({ token: T, workspaceUid: ws, number: "DT-INV-2026-0001", grandTotal: 1000, status: "Unpaid" });
+  it("anyone can read one summary by token; nobody can list", async () => {
+    await env.withSecurityRulesDisabled(async (ctx) => { await setDoc(doc(ctx.firestore(), `invoiceVerify/${T}`), summary()); });
+    await assertSucceeds(getDoc(doc(db(), `invoiceVerify/${T}`)));
+    await assertFails(getDocs(collection(db(), "invoiceVerify")));
+  });
+  it("only invoice managers of the same workspace write summaries", async () => {
+    await assertSucceeds(setDoc(doc(db("acct"), `invoiceVerify/${T}`), summary()));
+    await assertFails(setDoc(doc(db("sales"), `invoiceVerify/${T}`), summary()));
+    await assertFails(setDoc(doc(db("outsider"), `invoiceVerify/${T}`), summary()));
+    await assertFails(setDoc(doc(db("acct"), `invoiceVerify/${T}`), summary("other")));
+    await assertFails(setDoc(doc(db(), `invoiceVerify/${T}`), summary()));
+  });
+});
+
 describe("notifications and audit log", () => {
   it("notifications are private to their recipient", async () => {
     await assertSucceeds(getDoc(wsDoc("sales", "notifications/N1")));

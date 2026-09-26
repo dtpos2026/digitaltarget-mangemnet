@@ -13,12 +13,13 @@ import {
   lineTotal, nextInvoiceNo, PAYMENT_METHODS, statusClass,
 } from "@/lib/invoice";
 import { InvoiceA4, InvoicePOS } from "@/components/invoices/InvoiceTemplates";
+import { newVerifyToken, publishVerification, verifyUrl } from "@/lib/invoiceVerify";
 
 const emptyItem = (): InvoiceItem => ({ desc: "", qty: 1, price: 0, total: 0 });
 
 export default function InvoicesTab() {
   const { data, addItem, removeItem, updateItem, updateSettings } = useData();
-  const { can } = useAuth();
+  const { can, workspaceUid } = useAuth();
   const canManage = can("invoices.manage");
   const settings = data.settings || {};
   const prefix = settings.invoicePrefix || DEFAULT_INVOICE_PREFIX;
@@ -62,6 +63,8 @@ export default function InvoicesTab() {
   const totals = calcTotals(items, discountType, discountValue, taxRate);
   const clientOf = (id: string) => data.clients.find((c: any) => c.id === id);
   const projectOf = (id: string) => data.projects.find((p: any) => p.id === id);
+  const publish = (inv: any, voided = false) =>
+    workspaceUid ? publishVerification(workspaceUid, inv, clientOf(inv.clientId)?.name || "", settings, voided) : Promise.resolve();
 
   const resetEditor = () => {
     setEditId(""); setClientId(""); setProjectId(""); setInvoiceNo(nextInvoiceNo(data.invoices, prefix));
@@ -116,7 +119,9 @@ export default function InvoicesTab() {
         const existing = data.invoices.find((x: any) => x.id === editId);
         const paid = existing?.paidAmount || 0;
         const st = paid >= t.grandTotal && t.grandTotal > 0 ? "Paid" : paid > 0 ? "Partial" : "Unpaid";
-        await updateItem("invoices", { ...existing, ...common, status: st, paidAmount: Math.min(paid, t.grandTotal) });
+        const updated = { ...existing, ...common, status: st, paidAmount: Math.min(paid, t.grandTotal), verifyToken: existing?.verifyToken || newVerifyToken() };
+        await updateItem("invoices", updated);
+        await publish(updated);
         setEditorOpen(false);
         return;
       }
@@ -152,8 +157,10 @@ export default function InvoicesTab() {
         paidAmount: amtPaid, paidWalletId: paidWallet, dateTime: nowText(), startDate: issueDate, endDate,
         logoOverride, sign: signUpload || null, bankQR: bankQRUpload || null,
         payments: amtPaid > 0 ? [{ date: todayISO(), amount: amtPaid, walletId: paidWallet, method: paymentMethod }] : [],
+        verifyToken: newVerifyToken(),
       };
       await addItem("invoices", inv);
+      await publish(inv);
       if (amtPaid > 0) await postPayment(inv, amtPaid, paidWallet, paymentMethod);
       setEditorOpen(false);
       setPreviewInv(inv);
@@ -185,11 +192,14 @@ export default function InvoicesTab() {
     if (amt <= 0) { alert("Amount likhein"); return; }
     if (!payWallet) { alert("Account select karein"); return; }
     const newPaid = v.paid + amt;
-    await updateItem("invoices", {
+    const paidInv = {
       ...payInv, paidAmount: newPaid, paidWalletId: payWallet, paymentMethod: payMethod,
       status: newPaid >= v.grandTotal ? "Paid" : "Partial",
       payments: [...(payInv.payments || []), { date: todayISO(), amount: amt, walletId: payWallet, method: payMethod }],
-    });
+      verifyToken: payInv.verifyToken || newVerifyToken(),
+    };
+    await updateItem("invoices", paidInv);
+    await publish(paidInv);
     await postPayment(payInv, amt, payWallet, payMethod);
     setPayInv(null);
   };
@@ -198,6 +208,8 @@ export default function InvoicesTab() {
     const paid = (inv.paidAmount || 0) > 0;
     if (!confirm(`Invoice ${inv.invoiceNo || inv.id} delete karein?${paid ? "\n\nIs par payment record hai — Accounting entries aur account balance khud reverse nahi honge." : ""}`)) return;
     await removeItem("invoices", inv.id);
+    // Keep the QR link alive but show the invoice as cancelled (anti-fraud).
+    if (inv.verifyToken) await publish(inv, true);
   };
 
   // ---------- WhatsApp ----------
@@ -227,11 +239,20 @@ export default function InvoicesTab() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data.clients, settings.companyName]);
 
+  // Older invoices get a verification link the first time a manager opens them.
+  useEffect(() => {
+    if (!previewInv || previewInv.verifyToken || !canManage) return;
+    const withToken = { ...previewInv, verifyToken: newVerifyToken() };
+    updateItem("invoices", withToken).then(() => publish(withToken)).then(() => setPreviewInv(withToken)).catch(() => undefined);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [previewInv?.id]);
+
   useEffect(() => {
     setAutoQR("");
     if (!previewInv) return;
     let cancelled = false;
-    QRCode.toDataURL(qrPayload(previewInv), { width: 240, margin: 1, color: { dark: "#3D096D" } })
+    const payload = previewInv.verifyToken ? verifyUrl(previewInv.verifyToken) : qrPayload(previewInv);
+    QRCode.toDataURL(payload, { width: 240, margin: 1, color: { dark: "#3D096D" } })
       .then((u: string) => { if (!cancelled) setAutoQR(u); })
       .catch(() => undefined);
     return () => { cancelled = true; };

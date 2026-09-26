@@ -732,3 +732,29 @@ td.num, th.num { text-align: right; white-space: nowrap; font-variant-numeric: t
 .waWebBtn { background: #25D366; border-color: #25D366; color: #fff; }
 .waWebBtn:hover { background: #1ebe5a; color: #fff; border-color: #1ebe5a; }
 .waWebLink { border-color: rgba(37,211,102,.5); color: #128C4B; font-weight: 700; }
+
+/* ======= PUBLIC INVOICE VERIFICATION ======= */
+.verifyPage { min-height: 100vh; background: linear-gradient(160deg, #2A0650, #3D096D 45%, #F6F4FA 45%); padding: 24px 16px; display: flex; justify-content: center; align-items: flex-start; }
+.verifyCard { width: 100%; max-width: 480px; background: #fff; color: #1F1633; border-radius: 20px; overflow: hidden; box-shadow: 0 24px 60px rgba(20,0,40,.25); }
+.verifyHead { display: flex; align-items: center; gap: 12px; background: #3D096D; color: #fff; padding: 16px 20px; }
+.verifyHead b { display: block; font-family: 'Poppins', sans-serif; letter-spacing: .6px; }
+.verifyHead span { display: block; font-size: 11px; opacity: .75; letter-spacing: 1px; text-transform: uppercase; }
+.verifyBody { padding: 20px; }
+.verifyCenter { text-align: center; }
+.verifyCenter h2 { margin: 8px 0 4px; font-size: 20px; }
+.verifySeal { width: 64px; height: 64px; border-radius: 50%; margin: 4px auto 0; display: grid; place-items: center; font-size: 34px; font-weight: 900; color: #fff; }
+.verifySeal.ok { background: #16A34A; box-shadow: 0 0 0 8px rgba(22,163,74,.15); }
+.verifySeal.bad { background: #DC2626; box-shadow: 0 0 0 8px rgba(220,38,38,.15); }
+.verifyMeta { margin-top: 18px; background: #F5F0FC; border-radius: 14px; padding: 10px 14px; }
+.verifyMeta > div, .verifyTotals > div { display: flex; justify-content: space-between; gap: 10px; padding: 5px 0; font-size: 13px; }
+.verifyMeta span, .verifyTotals span:first-child { color: #6B6280; }
+.verifyItems { margin-top: 14px; border-top: 1px solid #ECE7F5; }
+.verifyItem { display: flex; justify-content: space-between; gap: 10px; padding: 10px 0; border-bottom: 1px solid #ECE7F5; font-size: 13px; }
+.verifyItem span { display: block; }
+.verifyTotals { margin-top: 10px; }
+.verifyTotals .grand { border-top: 2px solid #3D096D; margin-top: 4px; padding-top: 10px; font-weight: 800; font-size: 16px; color: #3D096D; }
+.verifyTotals .grand span:first-child { color: #3D096D; }
+.verifyTotals .paid { color: #16A34A; font-weight: 700; }
+.verifyTotals .due { font-weight: 800; }
+.verifyFoot { margin-top: 16px; text-align: center; }
+.verifyCard .small { color: #6B6280; }
