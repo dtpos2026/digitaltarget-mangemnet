@@ -116,6 +116,11 @@
       "label": "Reports"
     },
     {
+      "key": "performance.view",
+      "group": "Reports",
+      "label": "Team & WhatsApp Performance"
+    },
+    {
       "key": "team.view",
       "group": "Team",
       "label": "Team View"
@@ -228,7 +233,8 @@
       "team.view",
       "team.manage",
       "settings.manage",
-      "data.manage"
+      "data.manage",
+      "performance.view"
     ],
     "lead_manager": [
       "leads.view",
@@ -240,7 +246,8 @@
       "whatsapp.reply",
       "schedule.view",
       "schedule.manage",
-      "queries.manage"
+      "queries.manage",
+      "performance.view"
     ],
     "sales_support": [
       "leads.view",
@@ -358,6 +365,10 @@
     ],
     "queries": [
       "queries.manage"
+    ],
+    "waStats": [
+      "performance.view",
+      "whatsapp.view"
     ]
   },
   "collectionWrite": {

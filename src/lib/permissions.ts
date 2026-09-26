@@ -59,6 +59,7 @@ export const TAB_PERMISSIONS: Record<string, Permission[]> = {
   team: ["team.view"],
   schedule: ["schedule.view"],
   reports: ["reports.view"],
+  performance: ["performance.view"],
   budget: ["finance.view"],
   queries: ["queries.manage"],
   settings: ["settings.manage", "users.manage", "audit.view"],

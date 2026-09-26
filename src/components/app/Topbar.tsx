@@ -1,14 +1,53 @@
-import React, { useRef } from "react";
+import React, { useEffect, useRef, useState } from "react";
+import { Menu, MessageCircle, Moon, MoreVertical, Sun, Wifi, WifiOff } from "lucide-react";
+import { serviceOnline, useAccounts } from "@/components/whatsapp/useWhatsApp";
 import { useAuth } from "@/contexts/AuthContext";
 import { useData } from "@/contexts/DataContext";
 import NotificationBell from "./NotificationBell";
 
 interface Props {
   onToggleTheme: () => void;
+  dark: boolean;
+  title: string;
+  onMenu: () => void;
 }
 
-export default function Topbar({ onToggleTheme }: Props) {
-  const { logout, hasFullAccess } = useAuth();
+function useClock() {
+  const fmt = () => {
+    const d = new Date();
+    return `${d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} • ${d.toLocaleDateString([], { day: "numeric", month: "short", year: "numeric" })}`;
+  };
+  const [v, setV] = useState(fmt);
+  useEffect(() => { const t = setInterval(() => setV(fmt()), 30_000); return () => clearInterval(t); }, []);
+  return v;
+}
+
+function useOnline() {
+  const [on, setOn] = useState(typeof navigator === "undefined" ? true : navigator.onLine);
+  useEffect(() => {
+    const up = () => setOn(true), down = () => setOn(false);
+    window.addEventListener("online", up); window.addEventListener("offline", down);
+    return () => { window.removeEventListener("online", up); window.removeEventListener("offline", down); };
+  }, []);
+  return on;
+}
+
+export default function Topbar({ onToggleTheme, dark, title, onMenu }: Props) {
+  const { hasFullAccess, can, workspaceUid } = useAuth();
+  const [menu, setMenu] = useState(false);
+  const clock = useClock();
+  const online = useOnline();
+  const showWa = can("whatsapp.view");
+  const accounts = useAccounts(showWa ? workspaceUid : null);
+  const acc = accounts?.[0];
+  const WA_TEXT: Record<string, string> = {
+    connected: "WhatsApp Connected", connecting: "WhatsApp connecting…", qr: "WhatsApp: scan QR",
+    pairing: "WhatsApp: enter code", disconnected: "WhatsApp disconnected", logged_out: "WhatsApp logged out", error: "WhatsApp error",
+  };
+  const waText = !acc ? "WhatsApp not linked"
+    : acc.status === "connected" && !serviceOnline(acc) ? "WhatsApp service offline"
+    : WA_TEXT[acc.status] || `WhatsApp ${acc.status}`;
+  const waCls = acc?.status === "connected" && serviceOnline(acc) ? "ok" : acc ? "warn" : "";
   const { data, restoreData, resetData } = useData();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -94,28 +133,39 @@ Example: ALL ya 30d ya 3m`, "ALL"
   };
 
   return (
-    <div className="topbar">
+    <header className="topbar">
       <div className="topbar-inner">
-        <div className="brand">
-          <div className="logo">
-            {data.settings.logo?.data ? (
-              <img src={data.settings.logo.data} alt="logo" />
-            ) : (
-              <span style={{ fontWeight: 900 }}>DT</span>
-            )}
-          </div>
-          <div className="title">
-            <b>Digital Target Business Management</b>
-            <span>Management Portal</span>
-          </div>
+        <button className="iconBtn menuBtn" onClick={onMenu} aria-label="Open menu"><Menu size={20} /></button>
+        <div className="pageTitle">
+          <span className="pageBar" />
+          <b>{title}</b>
+        </div>
+        <div className="statusChips">
+          {showWa && (
+            <span className={`chip ${waCls}`} title="WhatsApp connection">
+              <MessageCircle size={13} /> {waText}
+            </span>
+          )}
+          <span className={`chip ${online ? "ok" : "bad"}`}>{online ? <Wifi size={13} /> : <WifiOff size={13} />} {online ? "Online" : "Offline"}</span>
+          <span className="chip clock">{clock}</span>
         </div>
         <div className="actions">
           <NotificationBell />
-          <button className="btnSmall" onClick={onToggleTheme}>Light/Dark</button>
-          {hasFullAccess && <button className="btnSmall" onClick={handleBackup}>Backup</button>}
-          {hasFullAccess && <button className="btnSmall" onClick={handleRestore}>Restore</button>}
-          {hasFullAccess && <button className="btnSmall" onClick={handleReset}>Reset</button>}
-          <button className="btnSmall" onClick={logout}>Logout</button>
+          <button className="iconBtn" onClick={onToggleTheme} aria-label="Toggle dark mode" title="Light / Dark">
+            {dark ? <Sun size={18} /> : <Moon size={18} />}
+          </button>
+          {hasFullAccess && (
+            <div className="menuWrap">
+              <button className="iconBtn" onClick={() => setMenu(!menu)} aria-label="Data menu" title="Backup / Restore / Reset"><MoreVertical size={18} /></button>
+              {menu && (
+                <div className="dropMenu" onMouseLeave={() => setMenu(false)}>
+                  <button onClick={() => { setMenu(false); handleBackup(); }}>⬇ Backup (JSON)</button>
+                  <button onClick={() => { setMenu(false); handleRestore(); }}>⬆ Restore</button>
+                  <button className="danger" onClick={() => { setMenu(false); handleReset(); }}>⚠ Reset data</button>
+                </div>
+              )}
+            </div>
+          )}
           <input
             ref={fileInputRef}
             type="file"
@@ -125,6 +175,6 @@ Example: ALL ya 30d ya 3m`, "ALL"
           />
         </div>
       </div>
-    </div>
+    </header>
   );
 }

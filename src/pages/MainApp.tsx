@@ -3,6 +3,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useData } from "@/contexts/DataContext";
 import Sidebar from "@/components/app/Sidebar";
 import Topbar from "@/components/app/Topbar";
+import { BrandLogo } from "@/components/app/BrandMark";
 import DashboardTab from "@/components/tabs/DashboardTab";
 import ClientsTab from "@/components/tabs/ClientsTab";
 import ProjectsTab from "@/components/tabs/ProjectsTab";
@@ -20,6 +21,7 @@ import AssignmentsTab from "@/components/tabs/AssignmentsTab";
 import MyPortalTab from "@/components/tabs/MyPortalTab";
 import QueriesTab from "@/components/tabs/QueriesTab";
 import WhatsAppTab from "@/components/whatsapp/WhatsAppTab";
+import PerformanceTab from "@/components/tabs/PerformanceTab";
 import { TAB_PERMISSIONS } from "@/lib/permissions";
 import { onNavigate } from "@/lib/navigation";
 
@@ -30,6 +32,7 @@ const ALL_TABS: TabDef[] = [
   { id: "whatsapp", label: "WhatsApp", countKey: "whatsapp" },
   { id: "leads", label: "Leads", countKey: "leads" },
   { id: "clients", label: "Clients", countKey: "clients" },
+  { id: "performance", label: "Performance", countKey: "performance" },
   { id: "projects", label: "Projects", countKey: "projects" },
   { id: "assignments", label: "Assignments", countKey: "assignments" },
   { id: "invoices", label: "Invoices", countKey: "invoices" },
@@ -48,7 +51,14 @@ const ALL_TABS: TabDef[] = [
 export default function MainApp() {
   const { can } = useAuth();
   const { data, loading } = useData();
-  const [darkMode, setDarkMode] = useState(false);
+  const [darkMode, setDarkMode] = useState(() => {
+    try { return localStorage.getItem("dt-theme") === "dark"; } catch { return false; }
+  });
+  const [navOpen, setNavOpen] = useState(false);
+  useEffect(() => {
+    document.body.classList.toggle("dark", darkMode);
+    try { localStorage.setItem("dt-theme", darkMode ? "dark" : "light"); } catch { /* private mode */ }
+  }, [darkMode]);
 
   // A tab is shown when the user holds any permission listed for it.
   const TABS: TabDef[] = useMemo(
@@ -74,14 +84,11 @@ export default function MainApp() {
     }
   }, [TABS, activeTab]);
 
-  const toggleTheme = () => {
-    setDarkMode(!darkMode);
-    document.body.classList.toggle("dark");
-  };
+  const toggleTheme = () => setDarkMode(!darkMode);
 
   const getCount = (key: string) => {
     switch (key) {
-      case "live": return "Live";
+      case "live": return null;
       case "clients": return data.clients.length;
       case "projects": return data.projects.length;
       case "assignments": return data.assignments.length;
@@ -91,13 +98,15 @@ export default function MainApp() {
       case "wallets": return data.wallets.length;
       case "team": return data.team.length;
       case "schedule": return data.schedule.length;
-      case "reports": return "PDF/CSV";
+      case "reports": return null;
       case "leads": return data.leads.length;
-      case "budget": return "📊";
+      case "budget": return null;
       case "queries": return data.queries.filter((q: any) => (q.status || "Open") === "Open").length || data.queries.length;
-      case "settings": return "⚙";
-      case "whatsapp": return "Chat";
-      case "myportal": return "👤";
+      case "settings":
+      case "whatsapp":
+      case "myportal":
+      case "performance":
+        return null;
       default: return 0;
     }
   };
@@ -105,7 +114,7 @@ export default function MainApp() {
   if (loading) {
     return (
       <div className="loading-screen">
-        <div className="login-logo">DT</div>
+        <BrandLogo size={44} />
         <p>Loading data...</p>
       </div>
     );
@@ -123,6 +132,7 @@ export default function MainApp() {
     switch (activeTab) {
       case "dash": return <DashboardTab />;
       case "whatsapp": return <WhatsAppTab focusConversationId={waFocus} />;
+      case "performance": return <PerformanceTab />;
       case "clients": return <ClientsTab />;
       case "projects": return <ProjectsTab />;
       case "assignments": return <AssignmentsTab />;
@@ -143,11 +153,11 @@ export default function MainApp() {
   };
 
   return (
-    <div className={darkMode ? "dark" : ""}>
-      <Topbar onToggleTheme={toggleTheme} />
-      <div className="container">
-        <Sidebar tabs={TABS} activeTab={activeTab} onTabChange={setActiveTab} getCount={getCount} />
-        <main className="grid">{renderTab()}</main>
+    <div className="appShell">
+      <Sidebar tabs={TABS} activeTab={activeTab} onTabChange={setActiveTab} getCount={getCount} open={navOpen} onClose={() => setNavOpen(false)} />
+      <div className="appMain">
+        <Topbar onToggleTheme={toggleTheme} dark={darkMode} title={ALL_TABS.find((t) => t.id === activeTab)?.label || ""} onMenu={() => setNavOpen(true)} />
+        <main className="grid appContent">{renderTab()}</main>
       </div>
     </div>
   );

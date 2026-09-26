@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { BrandMark } from "@/components/app/BrandMark";
 import { useAuth } from "@/contexts/AuthContext";
 
 // Accounts are created by an admin from Settings → User Management; there is
@@ -39,9 +40,9 @@ export default function Login() {
   return (
     <div className="login-page">
       <div className="login-card">
-        <div className="login-logo">DT</div>
-        <h1>Digital Target</h1>
-        <p className="login-subtitle">Business Management System</p>
+        <div className="login-brand"><BrandMark size={38} color="#fff" /></div>
+        <h1>DIGITAL TARGET</h1>
+        <p className="login-subtitle">Management Portal — sign in to continue</p>
 
         {error && <div className="login-error">{error}</div>}
         {info && <div className="login-info">{info}</div>}
@@ -78,6 +79,7 @@ export default function Login() {
         <button className="login-toggle" onClick={handleReset}>
           Password bhool gaye? Reset link bhejein
         </button>
+        <div className="login-foot">Accounts are created by your admin. © {new Date().getFullYear()} Digital Target</div>
       </div>
     </div>
   );

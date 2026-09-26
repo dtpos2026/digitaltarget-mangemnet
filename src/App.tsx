@@ -1,3 +1,4 @@
+import { BrandMark } from "@/components/app/BrandMark";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { DataProvider } from "@/contexts/DataContext";
 import Login from "@/pages/Login";
@@ -14,7 +15,7 @@ function NoAccess({ reason }: { reason: keyof typeof ACCESS_MESSAGES }) {
   return (
     <div className="login-page">
       <div className="login-card">
-        <div className="login-logo">DT</div>
+        <div className="login-brand"><BrandMark size={38} color="#fff" /></div>
         <h1>Access Pending</h1>
         <p className="login-subtitle">{user?.email}</p>
         <div className="login-error">{ACCESS_MESSAGES[reason]}</div>
@@ -30,7 +31,7 @@ function AppContent() {
   if (loading) {
     return (
       <div className="loading-screen">
-        <div className="login-logo">DT</div>
+        <BrandMark size={44} color="#fff" />
         <p>Loading...</p>
       </div>
     );

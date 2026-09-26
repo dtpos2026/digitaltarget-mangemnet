@@ -1,5 +1,6 @@
 import React, { useRef, useEffect, useCallback } from "react";
 import { useData } from "@/contexts/DataContext";
+import { useAuth } from "@/contexts/AuthContext";
 import { fmtMoney, todayISO, nowText } from "@/lib/db";
 import { saveElementAsImage, printElementHTML } from "@/lib/exportUtils";
 import { sanitizeHtml } from "@/lib/safeHtml";
@@ -30,7 +31,7 @@ function drawBarChart(canvas: HTMLCanvasElement, labels: string[], values: numbe
     const barH = (values[i] / max) * (h - 40);
     const x = startX + i * (barW + 10);
     const y = h - 20 - barH;
-    ctx.fillStyle = i === 0 ? color : (i === 1 ? "#ec4899" : "#f59e0b");
+    ctx.fillStyle = i === 0 ? color : (i === 1 ? "#A78BFA" : "#F59E0B");
     ctx.beginPath();
     ctx.roundRect(x, y, barW, barH, 6);
     ctx.fill();
@@ -54,7 +55,7 @@ function drawDonutChart(canvas: HTMLCanvasElement, parts: { name: string; value:
   const cx = w / 2, cy = h / 2;
   const r = Math.min(w, h) * 0.40;
   const inner = r * 0.62;
-  const palette = ["#3b82f6", "#22c55e", "#8b5cf6", "#f59e0b", "#ec4899", "#14b8a6"];
+  const palette = ["#3D096D", "#7C3AED", "#A78BFA", "#25D366", "#F59E0B", "#14B8A6"];
   let start = -Math.PI / 2;
   parts.forEach((p, i) => {
     const val = Math.max(0, p.value);
@@ -117,6 +118,19 @@ function drawRing(canvas: HTMLCanvasElement, value: number, max: number, color: 
 
 export default function DashboardTab() {
   const { data } = useData();
+  const { can } = useAuth();
+  const leadStats = (() => {
+    const leads = data.leads || [];
+    const converted = leads.filter((l) => l.status === "Converted").length;
+    return {
+      total: leads.length,
+      today: leads.filter((l) => l.date === todayISO()).length,
+      whatsapp: leads.filter((l) => l.source === "WhatsApp").length,
+      pipeline: leads.filter((l) => !["Converted", "Lost", "Invalid", "New"].includes(l.status)).length,
+      converted,
+      rate: leads.length ? Math.round((converted / leads.length) * 100) : 0,
+    };
+  })();
   const dashRef = useRef<HTMLDivElement>(null);
 
   let income = 0, expense = 0;
@@ -151,10 +165,10 @@ export default function DashboardTab() {
   const walletParts = data.wallets.map(w => ({ name: w.name, value: +(w.balance || 0) })).filter(p => p.value > 0);
   const walletsSorted = [...data.wallets].map(w => ({ id: w.id, name: w.name, value: +(w.balance || 0) })).sort((a, b) => b.value - a.value);
   const maxBal = Math.max(...walletsSorted.map(x => x.value), 1);
-  const palette = ["#8b5cf6", "#22c55e", "#3b82f6"];
+  const palette = ["#5B21B6", "#25D366", "#A78BFA"];
 
-  const incExpRef = useChart((c) => drawBarChart(c, ["Income", "Expense"], [income, expense], "#3b82f6"));
-  const invRef = useChart((c) => drawBarChart(c, ["Paid", "Running"], [paidInv, runningInv], "#22c55e"));
+  const incExpRef = useChart((c) => drawBarChart(c, ["Income", "Expense"], [income, expense], "#3D096D"));
+  const invRef = useChart((c) => drawBarChart(c, ["Paid", "Running"], [paidInv, runningInv], "#25D366"));
   const donutRef = useChart((c) => drawDonutChart(c, walletParts.length ? walletParts : [{ name: "No data", value: 1 }]));
 
   const ringRefs = useRef<(HTMLCanvasElement | null)[]>([]);
@@ -224,6 +238,17 @@ export default function DashboardTab() {
   return (
     <section className="card" ref={dashRef}>
       <h2>Manager Dashboard</h2>
+
+      {can("leads.view") && (
+        <div className="kpis" style={{ marginBottom: 12 }}>
+          <div className="kpi"><div className="t">Total Leads</div><div className="v">{leadStats.total}</div></div>
+          <div className="kpi"><div className="t">New Today</div><div className="v">{leadStats.today}</div></div>
+          <div className="kpi"><div className="t">WhatsApp Leads</div><div className="v">{leadStats.whatsapp}</div></div>
+          <div className="kpi"><div className="t">In Pipeline</div><div className="v">{leadStats.pipeline}</div></div>
+          <div className="kpi"><div className="t">Converted</div><div className="v">{leadStats.converted}</div></div>
+          <div className="kpi"><div className="t">Conversion Rate</div><div className="v">{leadStats.rate}%</div></div>
+        </div>
+      )}
 
       <div className="kpis">
         <div className="kpi"><div className="t">Total Income</div><div className="v">Rs {fmtMoney(income)}</div></div>
