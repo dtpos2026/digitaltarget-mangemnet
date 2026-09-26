@@ -22,3 +22,10 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Build info and editor workspace (may contain credentials)
+*.tsbuildinfo
+.workspace/
+.env
+.env.*
+!.env.example
