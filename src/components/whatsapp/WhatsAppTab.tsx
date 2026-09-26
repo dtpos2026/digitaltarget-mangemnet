@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useData } from "@/contexts/DataContext";
 import { normalizePhone } from "@/lib/phone";
-import { onNavigate } from "@/lib/navigation";
+import { onNavigate, openWhatsAppWeb } from "@/lib/navigation";
 import ConnectModal from "./ConnectModal";
 import Inbox from "./Inbox";
 import {
@@ -96,6 +96,9 @@ export default function WhatsAppTab({ focusConversationId }: { focusConversation
           </div>
           {account?.lastError && account.status !== "connected" && <div className="small waErrText">{account.lastError}</div>}
           {account?.numberMismatch && <div className="small waErrText">{account.lastError}</div>}
+        </div>
+        <div className="waBarActions">
+          <button className="btnSmall waWebLink" onClick={openWhatsAppWeb} title="Seedha WhatsApp Web (alag window)">🟢 WhatsApp Web</button>
         </div>
         {canManage && (
           <div className="waBarActions">

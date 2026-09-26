@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Menu, MessageCircle, Moon, MoreVertical, Sun, Wifi, WifiOff } from "lucide-react";
 import { serviceOnline, useAccounts } from "@/components/whatsapp/useWhatsApp";
+import { openWhatsAppWeb } from "@/lib/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { useData } from "@/contexts/DataContext";
 import NotificationBell from "./NotificationBell";
@@ -150,6 +151,11 @@ Example: ALL ya 30d ya 3m`, "ALL"
           <span className="chip clock">{clock}</span>
         </div>
         <div className="actions">
+          {showWa && (
+            <button className="iconBtn waWebBtn" onClick={openWhatsAppWeb} title="WhatsApp Web kholein" aria-label="Open WhatsApp Web">
+              <MessageCircle size={18} />
+            </button>
+          )}
           <NotificationBell />
           <button className="iconBtn" onClick={onToggleTheme} aria-label="Toggle dark mode" title="Light / Dark">
             {dark ? <Sun size={18} /> : <Moon size={18} />}
