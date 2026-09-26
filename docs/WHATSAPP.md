@@ -8,6 +8,11 @@ WhatsApp tab → **🟢 WhatsApp Web**. The first time, the page shows a 5-step 
 extension from the portal, extract it, open `chrome://extensions`, turn on Developer mode, and use Load unpacked
 (details in `chrome-extension/README.md`). After that:
 
+- **Modes:** the extension uses **Fast mode** (wa-js library) when it starts on your WhatsApp Web version. Otherwise it uses **Screen mode**, which reads the chat list and the open chat from the screen.
+  - In Screen mode, capture opens chats one by one, so they get marked as read.
+  - Sending uses WhatsApp's own click-to-chat page, and the extension then presses Send.
+  - Pictures are sent from WhatsApp with 📎.
+- **Default is "Alag window"**: WhatsApp now shows "Something went wrong" when it is embedded inside another site. "Portal ke andar (beta)" is still available.
 - Real WhatsApp Web opens **inside the portal** (right side). Scan the QR once from the phone
   (Settings → Linked devices → Link a device); the session stays saved in that browser.
   If embedding ever fails, **Alag window** opens it in its own window. The same panel keeps working, and

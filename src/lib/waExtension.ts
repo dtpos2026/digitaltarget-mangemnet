@@ -17,8 +17,21 @@ export interface WaExtChat {
   unread: number;
   archived: boolean;
 }
-export interface WaExtMessage { id: string; fromMe: boolean; type: string; t: number; text: string }
-export interface WaExtState { ready: boolean; authenticated: boolean; me: string; embedded?: boolean }
+export interface WaExtMessage { id: string; fromMe: boolean; type: string; t: number; text: string; remote?: string }
+export interface WaExtState {
+  ready: boolean;
+  authenticated: boolean;
+  me: string;
+  embedded?: boolean;
+  /** "wpp" = fast library mode, "dom" = reads the WhatsApp screen, "loading" = not ready yet. */
+  mode?: "wpp" | "dom" | "loading";
+  diag?: { wpp: boolean; injected: boolean; wppReady: boolean; loader: string; qr: boolean; errors: string[] };
+}
+
+/** Real WhatsApp id ("…@c.us" / "…@lid"); screen-mode ids ("dom:Name") are not stored on leads. */
+export const realJid = (id?: string) => (id && id.includes("@") ? id : undefined);
+export const phoneFromJid = (jid?: string) => (jid && /@c\.us$|@s\.whatsapp\.net$/.test(jid) ? jid.split("@")[0].replace(/\D/g, "") : "");
+export const isSkippedJid = (jid?: string) => !!jid && /@g\.us$|@newsletter$|@broadcast$/.test(jid);
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- event payloads differ per event
 type Listener = (event: string, data: any, embedded: boolean) => void;

@@ -6,7 +6,7 @@ import { uid, todayISO } from "@/lib/db";
 import { ChatLine } from "@/lib/chatClassifier";
 import { CaptureChat, planCapture } from "@/lib/leadCapture";
 import { formatLocalPhone } from "@/lib/phone";
-import { waExt } from "@/lib/waExtension";
+import { isSkippedJid, phoneFromJid, realJid, waExt } from "@/lib/waExtension";
 import { conversationName, updateConversation, WaConversation } from "./useWhatsApp";
 
 interface Row { id: string; name: string; phone: string; line: string; status: string; action: "created" | "linked" | "updated" | "unchanged" | "error"; reason: string }
@@ -31,15 +31,27 @@ export default function CaptureModal({ source, onClose }: { source: CaptureSourc
   const [error, setError] = useState("");
   const ext = source.kind === "extension";
 
-  const loadChats = async (): Promise<{ chat: CaptureChat; lines: () => Promise<ChatLine[]> }[]> => {
+  const loadChats = async (): Promise<{ chat: CaptureChat; lines: () => Promise<ChatLine[] | null> }[]> => {
     if (source.kind === "extension") {
       const chats = await waExt.chats({ sinceDays: sinceDays || undefined });
       return chats
         .filter((c) => !(skipSaved && c.saved))
-        .map((c) => ({
-          chat: { key: c.id, jid: c.id, phone: c.phone || undefined, name: c.name || c.pushname || (c.phone ? formatLocalPhone(c.phone) : ""), firstAt: undefined },
-          lines: async () => (await waExt.messages(c.id, 40)).filter((m) => m.type !== "call_log").map((m) => ({ text: m.text, fromMe: m.fromMe })),
-        }));
+        .map((c) => {
+          const chat: CaptureChat = { key: c.id, jid: realJid(c.id), phone: c.phone || undefined, name: c.name || c.pushname || (c.phone ? formatLocalPhone(c.phone) : "") };
+          return {
+            chat,
+            lines: async () => {
+              const msgs = await waExt.messages(c.id, 40);
+              // Screen mode: the number / WhatsApp id comes from the messages.
+              const remote = msgs.find((m) => m.remote)?.remote;
+              if (isSkippedJid(remote)) return null;
+              if (!chat.jid && realJid(remote)) chat.jid = remote;
+              if (!chat.phone) chat.phone = phoneFromJid(remote) || undefined;
+              if (!chat.name && chat.phone) chat.name = formatLocalPhone(chat.phone);
+              return msgs.filter((m) => m.type !== "call_log").map((m) => ({ text: m.text, fromMe: m.fromMe }));
+            },
+          };
+        });
     }
     const ws = source.ws;
     const snap = await getDocs(query(collection(db, "users", ws, "waConversations"), orderBy("lastMessageAt", "desc"), limit(2000)));
@@ -68,9 +80,12 @@ export default function CaptureModal({ source, onClose }: { source: CaptureSourc
     const out: Row[] = [];
 
     for (const { chat, lines } of items) {
-      const phone = chat.phone ? formatLocalPhone(chat.phone) : "";
+      let phone = chat.phone ? formatLocalPhone(chat.phone) : "";
       try {
-        const plan = planCapture(chat, await lines(), leads, { updateExisting, newId: () => uid("LD"), today: todayISO(), createdBy: "chat-capture" });
+        const ls = await lines();
+        if (!ls) { setDone((n) => n + 1); continue; } // group / channel
+        phone = chat.phone ? formatLocalPhone(chat.phone) : "";
+        const plan = planCapture(chat, ls, leads, { updateExisting, newId: () => uid("LD"), today: todayISO(), createdBy: "chat-capture" });
         const reason = plan.s.reason;
         if (plan.kind === "create") {
           await addItem("leads", plan.lead);
@@ -120,6 +135,7 @@ export default function CaptureModal({ source, onClose }: { source: CaptureSourc
           <>
             <ol className="actionPlan">
               <li>Tamam 1-to-1 chats (groups nahi) parhi jayengi{ext ? " — seedha aap ke WhatsApp Web se" : ""}.</li>
+              {ext && <li>WhatsApp Web window khuli rahe. Agar extension "Screen mode" mein hai to har chat baari baari khulegi (is se chats "read" ho jayengi) — 100 chats mein kuch minute lagte hain.</li>}
               <li>Number pehle se kisi lead mein ho to wohi lead link hogi, warna nayi lead banegi (Source: WhatsApp).</li>
               <li>Chat ki baat-cheet se <b>service category</b> (Marketing, Software, Design…) aur <b>status</b> (New, Contacted, Interested, Follow-up, Converted, Lost) set hoga. Aakhri messages lead ke notes mein save honge.</li>
             </ol>

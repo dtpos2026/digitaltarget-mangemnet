@@ -892,3 +892,4 @@ td { font-size: 13.5px; }
 .gtEmpty { margin-top: 10px; }
 .gtDone { margin-top: 10px; display: grid; gap: 6px; justify-items: start; }
 @media (max-width: 640px) { .modList li { grid-template-columns: auto 1fr; } .modList li > button { grid-column: 2; justify-self: start; } }
+.waWebHint { background: var(--brand-50); border-radius: 10px; padding: 6px 10px; }

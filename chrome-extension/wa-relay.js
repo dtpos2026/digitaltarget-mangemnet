@@ -87,8 +87,9 @@
     buildPanel();
     if (!panel) return;
     if (event === "state") {
-      statusEl.textContent = !data.ready ? "WhatsApp Web load ho raha hai…"
-        : data.authenticated ? `✓ Linked${data.me ? " • " + data.me : ""}` : "QR scan karein: Phone → Linked devices → Link a device";
+      const modeName = data.mode === "wpp" ? "Fast mode" : data.mode === "dom" ? "Screen mode" : "";
+      statusEl.textContent = !data.ready ? (data.diag && data.diag.qr ? "QR scan karein: Phone → Linked devices → Link a device" : "WhatsApp Web load ho raha hai…")
+        : data.authenticated ? `✓ Linked${data.me ? " • " + data.me : ""}${modeName ? " • " + modeName : ""}` : "QR scan karein: Phone → Linked devices → Link a device";
       statusEl.className = "dtp-status" + (data.authenticated ? " ok" : "");
     } else if (event === "active") {
       chatEl.textContent = data ? `${data.name || "Unknown"}${data.phone ? " • " + data.phone : ""}` : "";

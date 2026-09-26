@@ -8,7 +8,7 @@ import { LEAD_STATUSES } from "@/lib/leads";
 import { linesOf } from "@/lib/catalog";
 import { formatLocalPhone, normalizePhone } from "@/lib/phone";
 import {
-  EXTENSION_ZIP, onExtensionEvent, useExtensionVersion, waExt, WaExtChat, WaExtMessage, WaExtState,
+  EXTENSION_ZIP, onExtensionEvent, realJid, useExtensionVersion, waExt, WaExtChat, WaExtMessage, WaExtState,
 } from "@/lib/waExtension";
 import { BrandMark } from "@/components/app/BrandMark";
 import CaptureModal from "./CaptureModal";
@@ -28,8 +28,10 @@ const TEMPLATES: { label: string; text: string }[] = [
 
 type Active = (WaExtChat & { messages: WaExtMessage[] }) | null;
 
+// WhatsApp currently refuses to run inside another site's frame, so the
+// separate window is the default; "Portal ke andar" stays as an option.
 function readMode(): "embed" | "window" {
-  try { return localStorage.getItem(MODE_KEY) === "window" ? "window" : "embed"; } catch { return "embed"; }
+  try { return localStorage.getItem(MODE_KEY) === "embed" ? "embed" : "window"; } catch { return "window"; }
 }
 
 /**
@@ -131,7 +133,8 @@ export default function WaWebView({ openPhone }: { openPhone?: { phone: string; 
     waExt.open(openPhone.chatId ? { chatId: openPhone.chatId } : { phone: openPhone.phone }).catch((e) => setNote(e.message));
   }, [openPhone, st?.authenticated]);
 
-  const lead = active ? findLeadForChat({ key: active.id, jid: active.id, phone: active.phone || undefined, name: active.name }, data.leads) : undefined;
+  const activeJid = active ? realJid(active.id) || realJid(active.messages.find((m) => m.remote)?.remote) : undefined;
+  const lead = active ? findLeadForChat({ key: active.id, jid: activeJid, phone: active.phone || undefined, name: active.name }, data.leads) : undefined;
   const suggestion = active && active.messages.length ? classifyChat(active.messages.filter((m) => m.type !== "call_log").map((m) => ({ text: m.text, fromMe: m.fromMe }))) : null;
 
   const saveActive = async () => {
@@ -139,7 +142,7 @@ export default function WaWebView({ openPhone }: { openPhone?: { phone: string; 
     setBusy("lead");
     try {
       const plan = planCapture(
-        { key: active.id, jid: active.id, phone: active.phone || undefined, name: active.name || active.pushname },
+        { key: active.id, jid: activeJid, phone: active.phone || undefined, name: active.name || active.pushname },
         active.messages.filter((m) => m.type !== "call_log").map((m) => ({ text: m.text, fromMe: m.fromMe })),
         data.leads,
         { updateExisting: true, newId: () => uid("LD"), today: todayISO(), createdBy: user?.uid || "whatsapp-web" }
@@ -199,7 +202,10 @@ export default function WaWebView({ openPhone }: { openPhone?: { phone: string; 
   if (!version) return <SetupCard />;
 
   const linked = !!st?.authenticated;
-  const statusText = !st ? "WhatsApp Web khul raha hai…" : !st.ready ? "WhatsApp Web load ho raha hai…" : linked ? `Linked • ${formatLocalPhone(st.me) || ""}` : "QR scan karein";
+  const modeLabel = st?.mode === "wpp" ? "Fast mode" : st?.mode === "dom" ? "Screen mode" : "";
+  const statusText = !st ? (mode === "window" ? "WhatsApp window kholein (neeche button)" : "WhatsApp Web khul raha hai…")
+    : !st.ready ? (st.diag?.qr ? "QR scan karein" : "WhatsApp Web load ho raha hai…")
+    : linked ? `Linked${st.me ? " • " + formatLocalPhone(st.me) : ""}${modeLabel ? " • " + modeLabel : ""}` : "QR scan karein";
 
   return (
     <div className="waWeb">
@@ -210,6 +216,10 @@ export default function WaWebView({ openPhone }: { openPhone?: { phone: string; 
           <span className={`badge ${linked ? "ok" : "warn"}`}>{linked ? "Linked" : "Not linked"}</span>
         </div>
         <div className="small waWebStatus">{statusText}</div>
+        {st?.mode === "dom" && <div className="small waWebHint">Screen mode: WhatsApp window mein chats baari baari khol kar parhi jati hain. Pictures WhatsApp mein 📎 se bhejein.</div>}
+        {st && !st.ready && st.diag && (
+          <div className="small waWebHint">Check: library {st.diag.wpp ? (st.diag.wppReady ? "ready" : st.diag.injected ? "injected" : "loaded") : "missing"}{st.diag.errors.length ? ` • ${st.diag.errors[0]}` : ""}</div>
+        )}
         {!linked && (
           <ol className="waWebSteps">
             <li>Phone par WhatsApp kholein</li>
@@ -300,7 +310,7 @@ export default function WaWebView({ openPhone }: { openPhone?: { phone: string; 
       <section className="waWebMain">
         <div className="waWebToolbar">
           <div className="segmented">
-            <button className={mode === "embed" ? "on" : ""} onClick={() => setMode("embed")}>Portal ke andar</button>
+            <button className={mode === "embed" ? "on" : ""} onClick={() => setMode("embed")}>Portal ke andar (beta)</button>
             <button className={mode === "window" ? "on" : ""} onClick={() => setMode("window")}>Alag window</button>
           </div>
           {mode === "embed" && <button className="btnSmall" onClick={() => { setFrameSeen(false); setFrameKey((k) => k + 1); }}>↻ Reload</button>}
