@@ -88,6 +88,7 @@ export function InvoiceA4({ inv, client, project, settings, qr }: Props) {
           <div style={{ background: TINT, borderRadius: 12, padding: "10px 14px", fontSize: 12, lineHeight: 1.9 }}>
             <div style={{ display: "flex", justifyContent: "space-between" }}><span style={{ color: MUTED }}>Invoice date</span><b>{v.date || "—"}</b></div>
             <div style={{ display: "flex", justifyContent: "space-between" }}><span style={{ color: MUTED }}>Due date</span><b>{inv.dueDate || "On receipt"}</b></div>
+            {inv.category && <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}><span style={{ color: MUTED }}>Service</span><b style={{ textAlign: "right" }}>{inv.category}</b></div>}
             {inv.paymentMethod && <div style={{ display: "flex", justifyContent: "space-between" }}><span style={{ color: MUTED }}>Payment</span><b>{inv.paymentMethod}</b></div>}
           </div>
         </div>

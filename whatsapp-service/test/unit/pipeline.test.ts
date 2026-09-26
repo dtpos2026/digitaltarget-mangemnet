@@ -33,16 +33,16 @@ beforeEach(() => {
 
 describe("new WhatsApp contact → lead", () => {
   it("creates conversation, message, lead (source WhatsApp) and notifies lead/inbox users", async () => {
-    await pipe.handleMessages([waMsg({ jid: CUSTOMER, pushName: "Bilal", ts: 1790000000, message: { conversation: "Ads ka rate kya hai?" } })], "realtime");
+    await pipe.handleMessages([waMsg({ jid: CUSTOMER, pushName: "Bilal", ts: 1790000000, message: { conversation: "Facebook ads ka rate kya hai?" } })], "realtime");
 
     const conv = store.conversations.get("923001234567")!;
-    expect(conv).toMatchObject({ phone: "923001234567", pushName: "Bilal", unreadCount: 1, inboundCount: 1, lastMessageText: "Ads ka rate kya hai?" });
+    expect(conv).toMatchObject({ phone: "923001234567", pushName: "Bilal", unreadCount: 1, inboundCount: 1, lastMessageText: "Facebook ads ka rate kya hai?" });
     expect(conv.firstInboundAt).toBe(1790000000000);
 
     const [lead] = [...store.leads.values()];
     expect(lead).toMatchObject({
       name: "Bilal", phone: "03001234567", whatsapp: "03001234567", phoneE164: "923001234567",
-      source: "WhatsApp", status: "New", conversationId: "923001234567", createdBy: "whatsapp-service",
+      source: "WhatsApp", status: "New", serviceType: "Digital Marketing", conversationId: "923001234567", createdBy: "whatsapp-service",
       date: localDate(1790000000000, "Asia/Karachi"),
     });
     expect(lead.id).toMatch(/^LD-/);

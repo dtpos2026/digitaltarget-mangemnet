@@ -218,6 +218,21 @@ export function analyzeBusiness(data: any, today = new Date()): Analysis {
     }
   }
 
+  // ---------- revenue by service line (invoice category) ----------
+  const byLine: Record<string, number> = {};
+  for (const inv of invoices) {
+    const v = invoiceView(inv);
+    if (inv.category && v.date >= `${since}-01`) byLine[inv.category] = (byLine[inv.category] || 0) + v.grandTotal;
+  }
+  const lineTotal = Object.values(byLine).reduce((s, n) => s + n, 0);
+  if (lineTotal > 0) {
+    const ranked = Object.entries(byLine).sort((a, b) => b[1] - a[1]);
+    const [topLine, amt] = ranked[0];
+    insights.push({ id: "top-line", severity: "good", area: "Growth", title: `Sab se zyada billing: ${topLine} (${Math.round((amt / lineTotal) * 100)}%)`,
+      detail: ranked.slice(0, 4).map(([l, n]) => `${l} ${rs(n)}`).join(" • "),
+      action: ranked.length > 1 ? `${topLine} ke clients ko ${ranked[1][0]} bhi offer karein (cross-sell).` : `Doosri services (${topLine} ke ilawa) bhi offer karein.` });
+  }
+
   // ---------- team dues ----------
   const dues = team.reduce((s, t) => s + Math.max(0, (Number(t.rate) || 0) - (Number(t.paid) || 0)), 0);
   if (dues > 0) {

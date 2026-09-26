@@ -4,6 +4,8 @@
 
 export interface InvoiceItem {
   desc: string;
+  /** Catalog service id when picked from the service list. */
+  service?: string;
   qty: number;
   price: number;
   total: number;

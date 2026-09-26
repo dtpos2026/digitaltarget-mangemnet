@@ -3,6 +3,7 @@ import type { Chat, Contact, WACallEvent, WAMessage } from "@whiskeysockets/bail
 import { chatTypeOf, parseMessage, statusLabel, type ParsedMessage } from "./parser.js";
 import { isLidUser, isPnUser, jidNormalizedUser } from "@whiskeysockets/baileys";
 import { formatLocalPhone, jidUser, normalizePhone } from "./phone.js";
+import { detectServiceLine } from "./classify.js";
 import type {
   AccountSettings,
   CaptureStore,
@@ -361,7 +362,7 @@ export class CapturePipeline {
         whatsapp: local,
         phoneE164: phone,
         category: "Other",
-        serviceType: "",
+        serviceType: detectServiceLine(p.text || ""),
         software: "",
         plan: "Undecided",
         status: "New",

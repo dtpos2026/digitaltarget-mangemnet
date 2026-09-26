@@ -3,6 +3,7 @@ import { useData } from "@/contexts/DataContext";
 import { fileToBase64 } from "@/lib/db";
 import UserManagement from "@/components/UserManagement";
 import AuditLog from "@/components/AuditLog";
+import ServiceCatalog from "@/components/ServiceCatalog";
 import { DEFAULT_INVOICE_PREFIX, DEFAULT_TERMS } from "@/lib/invoice";
 import { useAuth } from "@/contexts/AuthContext";
 
@@ -111,6 +112,7 @@ export default function SettingsTab() {
       </section>
       )}
 
+      <ServiceCatalog />
       <UserManagement />
       <AuditLog />
     </>

@@ -4,6 +4,7 @@ import { useData } from "@/contexts/DataContext";
 import { normalizePhone } from "@/lib/phone";
 import { onNavigate, openWhatsAppWeb } from "@/lib/navigation";
 import ConnectModal from "./ConnectModal";
+import CaptureModal from "./CaptureModal";
 import Inbox from "./Inbox";
 import {
   createMainAccount,
@@ -34,6 +35,7 @@ export default function WhatsAppTab({ focusConversationId }: { focusConversation
   const account = accounts?.find((a) => a.id === MAIN_ACCOUNT_ID) || accounts?.[0];
   const [showConnect, setShowConnect] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [showCapture, setShowCapture] = useState(false);
   const [focus, setFocus] = useState<string | null>(focusConversationId || null);
   const [settings, setSettings] = useState<WaSettings>(DEFAULT_WA_SETTINGS);
   const [expected, setExpected] = useState("");
@@ -98,6 +100,9 @@ export default function WhatsAppTab({ focusConversationId }: { focusConversation
           {account?.numberMismatch && <div className="small waErrText">{account.lastError}</div>}
         </div>
         <div className="waBarActions">
+          {can(["leads.create"]) && can("whatsapp.reply") && (
+            <button className="btnSolid" onClick={() => setShowCapture(true)} title="Tamam chats se leads banayein">⚡ Capture Leads</button>
+          )}
           <button className="btnSmall waWebLink" onClick={openWhatsAppWeb} title="Seedha WhatsApp Web (alag window)">🟢 WhatsApp Web</button>
         </div>
         {canManage && (
@@ -123,6 +128,8 @@ export default function WhatsAppTab({ focusConversationId }: { focusConversation
       )}
 
       <Inbox ws={workspaceUid} account={account} focusConversationId={focus} />
+
+      {showCapture && workspaceUid && <CaptureModal ws={workspaceUid} onClose={() => setShowCapture(false)} />}
 
       {showConnect && (
         <ConnectModal

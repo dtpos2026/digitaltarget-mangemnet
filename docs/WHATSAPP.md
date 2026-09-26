@@ -47,6 +47,20 @@ Phone (0345-1873354) ⇄ WhatsApp servers ⇄ whatsapp-service (Docker, always o
 
 Response analytics are stored per conversation: first inbound message, first response time, and message counts in/out.
 
+## Capture Leads (one click)
+
+WhatsApp tab → **⚡ Capture Leads** reads every captured 1:1 chat (last 40 messages each) and:
+- links it to an existing lead with the same number, or creates a new lead (source WhatsApp);
+- sets the **service category** from what was discussed (AI Software, Digital Marketing, Social Media,
+  Graphic Design, Video, Web, Branding) and the **status** (New → Contacted → Interested / Follow-up →
+  Converted, or Lost) from the conversation (e.g. "price kitne", "baad mein batata hun", "advance bhej diya",
+  "not interested");
+- optionally moves existing leads forward (never backwards) and shows a table with the reason for each.
+
+The inbox's customer panel shows the same suggestion for the open chat ("✨ Chat se andaza") with
+*Apply to lead*. New leads created automatically by the service also get their service category from
+the first message. The rules are keyword-based (English + Roman Urdu) in `src/lib/chatClassifier.ts`.
+
 ## Settings (WhatsApp tab → ⚙ Settings)
 
 | Setting | Default |

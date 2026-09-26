@@ -803,3 +803,11 @@ td { font-size: 13.5px; }
 .kpi .v { font-size: 20px; }
 .subcard { border-radius: 14px; }
 .canvasCard { border-radius: 14px; box-shadow: none; }
+.invDesc { display: grid; grid-template-columns: 130px minmax(0, 1fr); gap: 6px; }
+.invDesc select { padding: 10px 8px; font-size: 12px; color: var(--brand-500); font-weight: 600; }
+@media (max-width: 820px) { .invDesc { grid-column: 1 / -1; grid-template-columns: 1fr; } }
+.aiSuggest { display: grid; gap: 4px; background: linear-gradient(135deg, rgba(91,33,182,.08), rgba(37,211,102,.08)); border: 1px solid rgba(91,33,182,.18); border-radius: 12px; padding: 10px; margin: 6px 0 8px; font-size: 13px; }
+.aiSuggest > span:first-child { font-size: 10px; letter-spacing: 1px; text-transform: uppercase; font-weight: 700; color: var(--brand-500); }
+.aiSuggest .btnSmall { justify-self: start; }
+.captureBar { height: 8px; background: var(--brand-50); border-radius: 999px; overflow: hidden; }
+.captureBar > div { height: 100%; background: linear-gradient(90deg, #3D096D, #16A34A); transition: width .3s ease; }

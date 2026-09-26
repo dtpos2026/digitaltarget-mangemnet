@@ -6,6 +6,7 @@ import { useData } from "@/contexts/DataContext";
 import { todayISO, uid } from "@/lib/db";
 import { formatLocalPhone, waLink } from "@/lib/phone";
 import { LEAD_STATUSES } from "@/lib/leads";
+import { classifyChat } from "@/lib/chatClassifier";
 import {
   conversationName,
   durationLabel,
@@ -165,7 +166,7 @@ export default function Inbox({ ws, account, focusConversationId }: { ws: string
     const id = uid("LD");
     await addItem("leads", {
       id, name: conversationName(selected), phone, whatsapp: phone, phoneE164: selected.phone || "",
-      category: "Other", serviceType: "", software: "", plan: "Undecided", status: "New", source: "WhatsApp",
+      category: "Other", serviceType: suggestion?.line || "", software: "", plan: "Undecided", status: suggestion?.status || "New", source: "WhatsApp",
       referralBy: "", meetingDate: "", followUpDate: "", notes: selected.lastMessageText ? `WhatsApp: ${selected.lastMessageText}` : "",
       date: todayISO(), createdAt: new Date().toISOString(), conversationId: selected.id, waJid: selected.jid,
       assignedTo: selected.assignedTo || "",
@@ -188,6 +189,15 @@ export default function Inbox({ ws, account, focusConversationId }: { ws: string
   };
 
   const openList = !selected;
+  // Suggested service + status from the loaded messages of this chat.
+  const suggestion = useMemo(
+    () => (messages.length ? classifyChat(messages.filter((m) => m.kind !== "call").map((m) => ({ text: m.text || "", fromMe: m.fromMe }))) : null),
+    [messages]
+  );
+  const applySuggestion = async () => {
+    if (!suggestion || !lead) return;
+    await updateItem("leads", { ...lead, status: suggestion.status, ...(suggestion.line ? { serviceType: suggestion.line } : {}), updatedAt: new Date().toISOString() });
+  };
 
   return (
     <div className={`waInbox ${openList ? "showList" : "showChat"}`}>
@@ -346,9 +356,20 @@ export default function Inbox({ ws, account, focusConversationId }: { ws: string
 
           <div className="waPanelSection">
             <div className="small">Lead</div>
+            {suggestion && (
+              <div className="aiSuggest">
+                <span>✨ Chat se andaza</span>
+                <b>{suggestion.line || "Service unclear"} • {suggestion.status}</b>
+                <span className="small">{suggestion.reason}</span>
+                {lead && can("leads.edit") && (lead.status !== suggestion.status || (suggestion.line && lead.serviceType !== suggestion.line)) && (
+                  <button className="btnSmall" onClick={applySuggestion}>Apply to lead</button>
+                )}
+              </div>
+            )}
             {lead ? (
               <>
                 <b>{lead.name}</b> <span className="small">({lead.id})</span>
+                {lead.serviceType && <div><span className="badge pri">{lead.serviceType}</span></div>}
                 <label>Status</label>
                 <select value={lead.status || "New"} disabled={!can("leads.edit")} onChange={(e) => setLeadField({ status: e.target.value })}>
                   {[...new Set([...LEAD_STATUSES, lead.status || "New"])].map((s) => <option key={s}>{s}</option>)}

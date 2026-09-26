@@ -14,6 +14,7 @@ import {
 } from "@/lib/invoice";
 import { InvoiceA4, InvoicePOS } from "@/components/invoices/InvoiceTemplates";
 import { newVerifyToken, publishVerification, verifyUrl } from "@/lib/invoiceVerify";
+import { linesOf, servicesOf } from "@/lib/catalog";
 
 const emptyItem = (): InvoiceItem => ({ desc: "", qty: 1, price: 0, total: 0 });
 
@@ -46,6 +47,10 @@ export default function InvoicesTab() {
   const [projectTitle, setProjectTitle] = useState("");
   const [endDate, setEndDate] = useState("");
   const [showBranding, setShowBranding] = useState(false);
+  const [category, setCategory] = useState("");
+  const [catFilter, setCatFilter] = useState("ALL");
+  const services = servicesOf(settings);
+  const lines = linesOf(settings);
 
   // ---------- list / preview state ----------
   const [search, setSearch] = useState("");
@@ -71,10 +76,17 @@ export default function InvoicesTab() {
     setIssueDate(todayISO()); setDueDate(""); setItems([emptyItem()]); setDiscountType("amount"); setDiscountValue(0);
     setTaxRate(Number(settings.defaultTaxRate) || 0); setStatus("Unpaid"); setPaidAmount(0); setPaidWallet("");
     setPaymentMethod("Cash"); setNotes(""); setTerms(settings.invoiceTerms || DEFAULT_TERMS);
-    setAutoCreateProject(true); setProjectTitle(""); setEndDate(""); setShowBranding(false);
+    setAutoCreateProject(true); setProjectTitle(""); setEndDate(""); setShowBranding(false); setCategory("");
   };
 
   const openNew = () => { resetEditor(); setEditorOpen(true); window.scrollTo({ top: 0, behavior: "smooth" }); };
+
+  const pickService = (idx: number, id: string) => {
+    const svc = services.find((x) => x.id === id);
+    if (!svc) return;
+    setItems(items.map((it, i) => (i === idx ? { ...it, desc: svc.name, price: svc.rate, total: lineTotal(it.qty || 1, svc.rate), service: svc.id } as InvoiceItem : it)));
+    if (!category) setCategory(svc.line);
+  };
 
   const setItem = (idx: number, field: keyof InvoiceItem, val: string) => {
     const next = items.map((it, i) => {
@@ -92,17 +104,18 @@ export default function InvoicesTab() {
     setDiscountType(inv.discountType || "amount"); setDiscountValue(inv.discountValue || 0); setTaxRate(inv.taxRate || 0);
     setStatus(inv.status || "Unpaid"); setPaidAmount(inv.paidAmount || 0); setPaidWallet(inv.paidWalletId || "");
     setPaymentMethod(inv.paymentMethod || "Cash"); setNotes(inv.notes || ""); setTerms(inv.terms ?? settings.invoiceTerms ?? DEFAULT_TERMS);
-    setAutoCreateProject(false); setEditorOpen(true);
+    setAutoCreateProject(false); setCategory(inv.category || ""); setEditorOpen(true);
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
   const handleSave = async () => {
     if (!clientId) { alert("Client select karein"); return; }
+    if (!category) { alert("Service category select karein (e.g. Digital Marketing)"); return; }
     const cleanItems = items.filter((i) => i.desc.trim()).map((i) => ({ ...i, desc: i.desc.trim(), total: lineTotal(i.qty, i.price) }));
     if (!cleanItems.length) { alert("Kam az kam 1 item likhein"); return; }
     const t = calcTotals(cleanItems, discountType, discountValue, taxRate);
     const common = {
-      clientId, projectId, invoiceNo: invoiceNo.trim() || nextInvoiceNo(data.invoices, prefix), items: cleanItems,
+      clientId, projectId, category, invoiceNo: invoiceNo.trim() || nextInvoiceNo(data.invoices, prefix), items: cleanItems,
       subtotal: t.subtotal, discountType, discountValue: Number(discountValue) || 0, discountAmount: t.discountAmount,
       taxRate: Number(taxRate) || 0, taxAmount: t.taxAmount, grandTotal: t.grandTotal,
       dateISO: issueDate, dueDate, paymentMethod, notes, terms,
@@ -145,7 +158,7 @@ export default function InvoicesTab() {
         const c = clientOf(clientId);
         const newProj = {
           id: uid("P"), clientId, title: (projectTitle.trim() || `${c?.name || "Project"} - ${cleanItems[0]?.desc || todayISO()}`).slice(0, 80),
-          category: "Auto from Invoice", start: (issueDate || todayISO()) + "T09:00", end: endDate ? endDate + "T18:00" : "",
+          category: category || "Auto from Invoice", start: (issueDate || todayISO()) + "T09:00", end: endDate ? endDate + "T18:00" : "",
           status: "Running", budget: t.grandTotal, notes: "Auto-created from invoice",
         };
         await addItem("projects", newProj);
@@ -315,12 +328,12 @@ export default function InvoicesTab() {
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     return views
-      .filter(({ inv, v }) => (filter === "ALL" || v.status === filter) &&
+      .filter(({ inv, v }) => (filter === "ALL" || v.status === filter) && (catFilter === "ALL" || inv.category === catFilter) &&
         (!q || [v.number, clientOf(inv.clientId)?.name].some((x) => String(x || "").toLowerCase().includes(q))))
       .sort((a, b) => String(b.v.date).localeCompare(String(a.v.date)))
       .map(({ inv }) => inv);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [views, search, filter, data.clients]);
+  }, [views, search, filter, catFilter, data.clients]);
   const kpi = views.reduce((k, { v }) => ({
     total: k.total + v.grandTotal, paid: k.paid + v.paid, due: k.due + v.due, overdue: k.overdue + (v.status === "Overdue" ? 1 : 0),
   }), { total: 0, paid: 0, due: 0, overdue: 0 });
@@ -361,7 +374,15 @@ export default function InvoicesTab() {
               </select>
               {clientId && <div className="small">{clientOf(clientId)?.phone || ""}</div>}
             </div>
-            <div><label>Invoice No.</label><input value={invoiceNo} onChange={(e) => setInvoiceNo(e.target.value)} /></div>
+            <div className="grid2" style={{ gap: 8 }}>
+              <div><label>Service category *</label>
+                <select value={category} onChange={(e) => setCategory(e.target.value)}>
+                  <option value="">Select…</option>
+                  {lines.map((l) => <option key={l}>{l}</option>)}
+                </select>
+              </div>
+              <div><label>Invoice No.</label><input value={invoiceNo} onChange={(e) => setInvoiceNo(e.target.value)} /></div>
+            </div>
             <div className="grid2" style={{ gap: 8 }}>
               <div><label>Date</label><input type="date" value={issueDate} onChange={(e) => setIssueDate(e.target.value)} /></div>
               <div><label>Due date</label><input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} /></div>
@@ -392,10 +413,20 @@ export default function InvoicesTab() {
           </div>
 
           <div className="invItems">
-            <div className="invItemsHead"><span>Description</span><span>Qty</span><span>Rate</span><span>Amount</span><span /></div>
+            <div className="invItemsHead"><span>Service / description</span><span>Qty</span><span>Rate</span><span>Amount</span><span /></div>
             {items.map((it, i) => (
               <div className="invItemRow" key={i}>
-                <input value={it.desc} onChange={(e) => setItem(i, "desc", e.target.value)} placeholder="e.g. Facebook Ads management (1 month)" aria-label="Description" />
+                <div className="invDesc">
+                  <select value="" onChange={(e) => pickService(i, e.target.value)} aria-label="Pick a service" title="Service list se chunein">
+                    <option value="">＋ Service</option>
+                    {lines.map((l) => (
+                      <optgroup key={l} label={l}>
+                        {services.filter((x) => x.line === l).map((x) => <option key={x.id} value={x.id}>{x.name} — Rs {fmtMoney(x.rate)}</option>)}
+                      </optgroup>
+                    ))}
+                  </select>
+                  <input value={it.desc} onChange={(e) => setItem(i, "desc", e.target.value)} placeholder="e.g. Facebook Ads management (1 month)" aria-label="Description" />
+                </div>
                 <input type="number" min="0" value={it.qty} onChange={(e) => setItem(i, "qty", e.target.value)} aria-label="Qty" />
                 <input type="number" min="0" value={it.price} onChange={(e) => setItem(i, "price", e.target.value)} aria-label="Rate" />
                 <b className="invAmt">{fmtMoney(lineTotal(it.qty, it.price))}</b>
@@ -474,6 +505,10 @@ export default function InvoicesTab() {
         <div className="sectionHead">
           <input className="invSearch" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search invoice # or client…" />
           <div className="waFilters" style={{ marginTop: 0 }}>
+            <select value={catFilter} onChange={(e) => setCatFilter(e.target.value)} style={{ width: "auto" }} aria-label="Filter by category">
+              <option value="ALL">All categories</option>
+              {lines.map((l) => <option key={l}>{l}</option>)}
+            </select>
             {["ALL", "Unpaid", "Partial", "Overdue", "Paid"].map((f) => (
               <button key={f} className={`waChip ${filter === f ? "active" : ""}`} onClick={() => setFilter(f)}>{f === "ALL" ? "All" : f}</button>
             ))}
@@ -481,14 +516,15 @@ export default function InvoicesTab() {
         </div>
         <div className="tablewrap" style={{ marginTop: 10 }}>
           <table>
-            <thead><tr><th>Invoice</th><th>Client</th><th>Date / Due</th><th className="num">Total</th><th className="num">Balance</th><th>Status</th><th>Actions</th></tr></thead>
+            <thead><tr><th>Invoice</th><th>Client</th><th>Category</th><th>Date / Due</th><th className="num">Total</th><th className="num">Balance</th><th>Status</th><th>Actions</th></tr></thead>
             <tbody>
               {filtered.map((inv: any) => {
                 const v = invoiceView(inv);
                 return (
                   <tr key={inv.id}>
                     <td style={{ whiteSpace: "nowrap" }}><b>{v.number}</b></td>
-                    <td>{clientOf(inv.clientId)?.name || "—"}</td>
+                    <td>{clientOf(inv.clientId)?.name || "—"}<div className="small">{projectOf(inv.projectId)?.title || ""}</div></td>
+                    <td>{inv.category ? <span className="badge pri">{inv.category}</span> : <span className="small">—</span>}</td>
                     <td>{v.date}<div className="small">{inv.dueDate ? `Due ${inv.dueDate}` : ""}</div></td>
                     <td className="num">Rs {fmtMoney(v.grandTotal)}</td>
                     <td className="num"><b>Rs {fmtMoney(v.due)}</b></td>
@@ -503,7 +539,7 @@ export default function InvoicesTab() {
                   </tr>
                 );
               })}
-              {filtered.length === 0 && <tr><td colSpan={7} className="small">Koi invoice nahi.</td></tr>}
+              {filtered.length === 0 && <tr><td colSpan={8} className="small">Koi invoice nahi.</td></tr>}
             </tbody>
           </table>
         </div>

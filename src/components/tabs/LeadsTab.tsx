@@ -4,6 +4,7 @@ import { uid, todayISO, fmtMoney } from "@/lib/db";
 import { saveElementAsImage, printElementHTML } from "@/lib/exportUtils";
 import { leadPhones, normalizePhone, waLink } from "@/lib/phone";
 import { LEAD_STATUSES } from "@/lib/leads";
+import { linesOf } from "@/lib/catalog";
 import { navigate } from "@/lib/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 
@@ -14,7 +15,7 @@ export default function LeadsTab() {
   const [phone, setPhone] = useState("");
   const [whatsapp, setWhatsapp] = useState("");
   const [category, setCategory] = useState("Restaurant");
-  const [serviceType, setServiceType] = useState("Social Media Marketing");
+  const [serviceType, setServiceType] = useState("Digital Marketing");
   const [software, setSoftware] = useState("POS Software");
   const [plan, setPlan] = useState("Undecided");
   const [status, setStatus] = useState("New");
@@ -25,14 +26,12 @@ export default function LeadsTab() {
   const [notes, setNotes] = useState("");
   const [filterCat, setFilterCat] = useState("ALL");
   const [filterStatus, setFilterStatus] = useState("ALL");
+  const [filterService, setFilterService] = useState("ALL");
   const [editId, setEditId] = useState<string | null>(null);
 
   const categories = ["Restaurant","Doctor/Clinic","School/Academy","Mechanic/Workshop","Retail/Shop","Salon/Beauty","Gym/Fitness","Real Estate","E-commerce","Other"];
-  const serviceTypes = [
-    "Social Media Marketing","SEO","Google Ads","Facebook/Instagram Ads",
-    "Web Development","Graphic Design","Video Editing/Reels",
-    "Branding","Content Writing","Photography","Other Marketing"
-  ];
+  // Service categories come from Settings → Services & Categories; older lead values stay selectable.
+  const serviceTypes = Array.from(new Set([...linesOf(data.settings), ...data.leads.map((l: any) => l.serviceType).filter(Boolean)]));
   const softwareOptions = ["POS Software","Management Software","Automation Software","Billing/Invoicing","Custom Solution","None","Other"];
   const planOptions = ["Monthly","Yearly","Lifetime","One-time","Undecided"];
   const statusOptions = LEAD_STATUSES;
@@ -73,7 +72,7 @@ export default function LeadsTab() {
   const handleEdit = (l: any) => {
     setEditId(l.id);
     setName(l.name || ""); setPhone(l.phone || ""); setWhatsapp(l.whatsapp || l.phone || "");
-    setCategory(l.category || "Restaurant"); setServiceType(l.serviceType || "Social Media Marketing");
+    setCategory(l.category || "Restaurant"); setServiceType(l.serviceType || "Digital Marketing");
     setSoftware(l.software || "POS Software"); setPlan(l.plan || "Undecided");
     setStatus(l.status || "New"); setSource(l.source || "WhatsApp");
     setReferralBy(l.referralBy || ""); setMeetingDate(l.meetingDate || "");
@@ -105,6 +104,7 @@ export default function LeadsTab() {
   const filtered = data.leads.filter(l => {
     if (filterCat !== "ALL" && l.category !== filterCat) return false;
     if (filterStatus !== "ALL" && l.status !== filterStatus) return false;
+    if (filterService !== "ALL" && l.serviceType !== filterService) return false;
     return true;
   });
 
@@ -192,7 +192,7 @@ export default function LeadsTab() {
             {categories.map(c => <option key={c}>{c}</option>)}
           </select>
         </div>
-        <div><label>Service / Marketing Type</label>
+        <div><label>Service Category</label>
           <select value={serviceType} onChange={(e) => setServiceType(e.target.value)}>
             {serviceTypes.map(s => <option key={s}>{s}</option>)}
           </select>
@@ -244,11 +244,17 @@ export default function LeadsTab() {
       </div>
 
       <hr />
-      <div className="grid2">
-        <div><label>Filter by Category</label>
+      <div className="grid3">
+        <div><label>Filter by Business Type</label>
           <select value={filterCat} onChange={(e) => setFilterCat(e.target.value)}>
             <option value="ALL">All Categories</option>
             {categories.map(c => <option key={c}>{c}</option>)}
+          </select>
+        </div>
+        <div><label>Filter by Service</label>
+          <select value={filterService} onChange={(e) => setFilterService(e.target.value)}>
+            <option value="ALL">All Services</option>
+            {serviceTypes.map(s => <option key={s}>{s}</option>)}
           </select>
         </div>
         <div><label>Filter by Status</label>
