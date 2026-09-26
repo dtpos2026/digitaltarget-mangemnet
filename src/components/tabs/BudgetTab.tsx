@@ -2,6 +2,7 @@ import React, { useState, useRef } from "react";
 import { useData } from "@/contexts/DataContext";
 import { fmtMoney } from "@/lib/db";
 import { saveElementAsImage, printElementHTML } from "@/lib/exportUtils";
+import GrowthAnalysis from "@/components/GrowthAnalysis";
 
 export default function BudgetTab() {
   const { data, addItem, updateItem } = useData();
@@ -16,8 +17,8 @@ export default function BudgetTab() {
   const catSpend: Record<string, number> = {};
   data.accounting.forEach((a) => {
     if (a.date >= monthStart && a.date <= monthEnd) {
-      if (a.type === "IN" && a.category === "Invoice Paid") monthIncome += a.amount;
-      if (a.type === "OUT") {
+      if (a.type === "IN" && a.category !== "Account Adjustment") monthIncome += a.amount;
+      if (a.type === "OUT" && a.category !== "Account Adjustment") {
         monthExpense += a.amount;
         catSpend[a.category || "Other"] = (catSpend[a.category || "Other"] || 0) + a.amount;
       }
@@ -160,16 +161,18 @@ export default function BudgetTab() {
   };
 
   return (
+    <>
+    <GrowthAnalysis />
     <section className="card" ref={sectionRef}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
         <div>
-          <h2 style={{ margin: 0 }}>Budget &amp; Savings Tracker</h2>
+          <h2 style={{ margin: 0 }}>Budget &amp; Savings</h2>
           <div className="small">Set monthly budgets per expense category. Get alerts when spending exceeds limits. Track savings goals.</div>
         </div>
         <div style={{ display: "flex", gap: 6 }}>
-          <button className="btnSmall" onClick={exportBudgetPDF}>📄 PDF</button>
-          <button className="btnSmall" onClick={() => exportBudgetImage("png")}>🖼 PNG</button>
-          <button className="btnSmall" onClick={() => exportBudgetImage("jpg")}>📷 JPG</button>
+          <button className="btnSmall" onClick={exportBudgetPDF}>PDF</button>
+          <button className="btnSmall" onClick={() => exportBudgetImage("png")}>PNG</button>
+          <button className="btnSmall" onClick={() => exportBudgetImage("jpg")}>JPG</button>
         </div>
       </div>
 
@@ -181,7 +184,7 @@ export default function BudgetTab() {
       <div className="grid3" style={{ marginTop: 10 }}>
         <div className="kpi"><div className="t">Savings Target (50%)</div><div className="v">Rs {fmtMoney(savingsTarget)}</div></div>
         <div className="kpi"><div className="t">Savings %</div><div className="v">{savingsPct}%</div></div>
-        <div className="kpi"><div className="t">Status</div><div className="v">{savings >= savingsTarget ? "✅ On Track" : "⚠️ Below Target"}</div></div>
+        <div className="kpi"><div className="t">Status</div><div className="v">{savings >= savingsTarget ? "On track" : "Below target"}</div></div>
       </div>
 
       <hr />
@@ -205,7 +208,7 @@ export default function BudgetTab() {
       {monthIncome > 0 && (
         <>
           <hr />
-          <h2 style={{ marginTop: 0 }}>💡 Smart Budget Suggestions</h2>
+          <h2 style={{ marginTop: 0 }}>Suggested Budgets</h2>
           <div className="small" style={{ marginBottom: 10 }}>Based on your monthly income of Rs {fmtMoney(monthIncome)}, here are recommended budget allocations (50% savings rule):</div>
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 10 }}>
             <button className="btnSolid" onClick={applyAllSuggested}>Apply All Suggestions</button>
@@ -293,5 +296,6 @@ export default function BudgetTab() {
         </table>
       </div>
     </section>
+  </>
   );
 }

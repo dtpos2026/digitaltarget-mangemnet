@@ -1,7 +1,7 @@
 import React from "react";
 import {
   BarChart3, BookOpen, Briefcase, CalendarDays, ClipboardList, FileText, Gauge, HelpCircle, LogOut,
-  MessageCircle, PiggyBank, Settings, Target, User, Users, UsersRound, Wallet, Receipt, Activity, type LucideIcon,
+  MessageCircle, Settings, Target, User, Users, UsersRound, Wallet, Receipt, Activity, TrendingUp, type LucideIcon,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { roleLabel } from "@/lib/permissions";
@@ -16,7 +16,7 @@ export interface Tab {
 const ICONS: Record<string, LucideIcon> = {
   dash: Gauge, myportal: User, whatsapp: MessageCircle, leads: Target, clients: UsersRound, performance: Activity,
   projects: Briefcase, assignments: ClipboardList, schedule: CalendarDays, queries: HelpCircle, team: Users,
-  invoices: Receipt, accounting: BookOpen, khata: FileText, accounts: Wallet, budget: PiggyBank, reports: BarChart3,
+  invoices: Receipt, accounting: BookOpen, khata: FileText, accounts: Wallet, budget: TrendingUp, reports: BarChart3,
   settings: Settings,
 };
 

@@ -168,9 +168,9 @@ export default function LeadsTab() {
           <div className="small">Marketing leads, meetings, follow-ups aur referrals manage karein.</div>
         </div>
         <div style={{ display: "flex", gap: 6 }}>
-          <button className="btnSmall" onClick={exportLeadsPDF}>📄 PDF</button>
-          <button className="btnSmall" onClick={() => exportLeadsImage("png")}>🖼 PNG</button>
-          <button className="btnSmall" onClick={() => exportLeadsImage("jpg")}>📷 JPG</button>
+          <button className="btnSmall" onClick={exportLeadsPDF}>PDF</button>
+          <button className="btnSmall" onClick={() => exportLeadsImage("png")}>PNG</button>
+          <button className="btnSmall" onClick={() => exportLeadsImage("jpg")}>JPG</button>
         </div>
       </div>
 

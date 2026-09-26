@@ -81,7 +81,7 @@ export default function AssignmentsTab() {
   return (
     <>
       <section className="card">
-        <h2>📋 Assign Work to Team Member</h2>
+        <h2>Assign Work to Team Member</h2>
         <div className="grid3">
           <div>
             <label>Team Member</label>
@@ -110,7 +110,7 @@ export default function AssignmentsTab() {
       </section>
 
       <section className="card" style={{ marginTop: 14 }}>
-        <h2>📑 All Assignments</h2>
+        <h2>All Assignments</h2>
         <div className="grid3">
           <div><label>Filter Member</label>
             <select value={filterMember} onChange={(e) => setFilterMember(e.target.value)}>
@@ -147,8 +147,8 @@ export default function AssignmentsTab() {
                       </select>
                     </td>
                     <td className="rowActions">
-                      <button className="btnSmall" onClick={() => printPNG(a)}>📷 PNG Form</button>
-                      {a.driveLink && <a className="btnSmall" href={a.driveLink} target="_blank" rel="noreferrer">🔗 Open</a>}
+                      <button className="btnSmall" onClick={() => printPNG(a)}>PNG Form</button>
+                      {a.driveLink && <a className="btnSmall" href={a.driveLink} target="_blank" rel="noreferrer">Open link</a>}
                       <button className="btnSmall" onClick={() => { if (confirm("Delete?")) removeItem("assignments", a.id); }}>Delete</button>
                     </td>
                   </tr>

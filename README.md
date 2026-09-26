@@ -45,6 +45,10 @@ npm run dev              # run the service locally (see .env.example)
 
 ## Status
 
+**Done (increment 3):** invoice QR opens a public verified slip (/verify/{token}); Budget & Growth with automatic
+business analysis (health score, forecast, +15% target, leads needed, insights and action plan); Clients rebuilt
+(search, edit, profile with invoices / projects / leads); consistent module styling; one-click WhatsApp Web.
+
 **Done (increment 2):** Digital Target branding (logo mark, purple theme, new sidebar/topbar shell,
 login, mobile drawer); invoices redesigned end to end (numbering, discount, tax, payment method, terms, branded
 A4 + POS templates, PDF download, record-payment dialog); WhatsApp photo/document sending, call log, daily stats

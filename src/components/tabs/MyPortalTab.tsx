@@ -82,7 +82,7 @@ export default function MyPortalTab() {
   if (!teamId || !me) {
     return (
       <section className="card">
-        <h2>👤 My Portal</h2>
+        <h2>My Portal</h2>
         <div style={{ padding: 20, textAlign: "center" }}>
           <p>Aap ka account abhi tak kisi <b>Team Member record</b> se link nahi hua.</p>
           <p className="small" style={{ marginTop: 6 }}>Apne admin/manager se kahein ke woh Settings → User Management se aap ko link karein.</p>
@@ -95,7 +95,7 @@ export default function MyPortalTab() {
     <>
       {/* Profile Header */}
       <section className="card">
-        <h2>👤 Welcome, {me.name}</h2>
+        <h2>Welcome, {me.name}</h2>
         <div className="kpis" style={{ marginTop: 8 }}>
           <div className="kpi"><div className="t">Average Rating</div><div className="v">⭐ {avgRating} / 5</div></div>
           <div className="kpi"><div className="t">Projects Done</div><div className="v">{me.projectsDone || 0}</div></div>
@@ -113,7 +113,7 @@ export default function MyPortalTab() {
 
       {/* My Assignments */}
       <section className="card" style={{ marginTop: 14 }}>
-        <h2>📋 My Assigned Work ({myAssignments.length})</h2>
+        <h2>My Assigned Work ({myAssignments.length})</h2>
         {myAssignments.length === 0 && <div className="small">Abhi koi task assign nahi hai.</div>}
         <div style={{ display: "grid", gap: 10, marginTop: 10 }}>
           {myAssignments.map((a: any) => {
@@ -132,7 +132,7 @@ export default function MyPortalTab() {
                     {a.description && <div style={{ marginTop: 6, fontSize: 13, whiteSpace: "pre-wrap" }}>{a.description}</div>}
                     {a.driveLink && (
                       <div style={{ marginTop: 6 }}>
-                        <a className="btnSmall" href={a.driveLink} target="_blank" rel="noreferrer">🔗 Open Drive / Content</a>
+                        <a className="btnSmall" href={a.driveLink} target="_blank" rel="noreferrer">Open Drive / Content</a>
                       </div>
                     )}
                   </div>
@@ -176,7 +176,7 @@ export default function MyPortalTab() {
 
       {/* My Schedule */}
       <section className="card" style={{ marginTop: 14 }}>
-        <h2>🗓️ My Schedule ({mySchedule.length})</h2>
+        <h2>My Schedule ({mySchedule.length})</h2>
         {mySchedule.length === 0 && <div className="small">Koi schedule entry nahi.</div>}
         <div className="tablewrap" style={{ marginTop: 8 }}>
           <table>
@@ -192,7 +192,7 @@ export default function MyPortalTab() {
 
       {/* My Payouts */}
       <section className="card" style={{ marginTop: 14 }}>
-        <h2>💰 My Payouts ({myPayouts.length})</h2>
+        <h2>My Payouts ({myPayouts.length})</h2>
         <div className="tablewrap">
           <table>
             <thead><tr><th>Date</th><th>Amount</th><th>Note</th></tr></thead>
@@ -208,7 +208,7 @@ export default function MyPortalTab() {
 
       {/* My Work Logs */}
       <section className="card" style={{ marginTop: 14 }}>
-        <h2>📜 My Work History ({myLogs.length})</h2>
+        <h2>My Work History ({myLogs.length})</h2>
         <div className="tablewrap">
           <table>
             <thead><tr><th>Date</th><th>Type</th><th>Title</th><th>Amount</th><th>Status</th><th>Rating</th></tr></thead>
@@ -224,7 +224,7 @@ export default function MyPortalTab() {
 
       {/* Queries / Ownership module */}
       <section className="card" style={{ marginTop: 14 }}>
-        <h2>📨 Send Query to Management</h2>
+        <h2>Send Query to Management</h2>
         <div className="grid2">
           <div><label>Subject</label><input value={qSubject} onChange={(e) => setQSubject(e.target.value)} placeholder="e.g. Payment query / Leave request" /></div>
           <div style={{ display: "flex", alignItems: "flex-end" }}>

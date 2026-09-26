@@ -44,7 +44,7 @@ const ALL_TABS: TabDef[] = [
   { id: "team", label: "Team", countKey: "team" },
   { id: "schedule", label: "Schedule", countKey: "schedule" },
   { id: "reports", label: "Reports", countKey: "reports" },
-  { id: "budget", label: "Budget", countKey: "budget" },
+  { id: "budget", label: "Budget & Growth", countKey: "budget" },
   { id: "queries", label: "Queries", countKey: "queries" },
   { id: "settings", label: "Settings", countKey: "settings" },
   { id: "myportal", label: "My Portal", countKey: "myportal" },

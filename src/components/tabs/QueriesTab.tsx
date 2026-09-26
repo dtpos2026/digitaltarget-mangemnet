@@ -37,7 +37,7 @@ export default function QueriesTab() {
 
   return (
     <section className="card">
-      <h2>📨 Team Queries / Ownership Inbox</h2>
+      <h2>Team Queries / Ownership Inbox</h2>
       <div className="kpis" style={{ marginTop: 6 }}>
         <div className="kpi"><div className="t">Open</div><div className="v">{counts.open}</div></div>
         <div className="kpi"><div className="t">In Progress</div><div className="v">{counts.progress}</div></div>

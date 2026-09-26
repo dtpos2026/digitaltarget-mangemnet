@@ -135,8 +135,9 @@ export default function DashboardTab() {
 
   let income = 0, expense = 0;
   data.accounting.forEach((a) => {
-    if (a.type === "IN" && a.category === "Invoice Paid") income += a.amount || 0;
-    if (a.type === "OUT") expense += a.amount || 0;
+    // All income except internal balance adjustments (same rule as Budget & Growth).
+    if (a.type === "IN" && a.category !== "Account Adjustment") income += a.amount || 0;
+    if (a.type === "OUT" && a.category !== "Account Adjustment") expense += a.amount || 0;
   });
   const profit = income - expense;
 
