@@ -9,7 +9,7 @@ import {
 } from "@/lib/finance";
 
 export default function AccountingTab() {
-  const { data, addItem, removeItem, updateItem } = useData();
+  const { data, addItem, removeItem, updateItem, adjustWallet } = useData();
   const [editId, setEditId] = useState<string | null>(null);
   const [type, setType] = useState("IN");
   const [date, setDate] = useState(todayISO());
@@ -45,59 +45,22 @@ export default function AccountingTab() {
     setCategory("Invoice Paid"); setWalletId(""); setAmount(""); setDesc(""); setScope("business");
   };
 
-  const adjustWallet = async (wId: string, deltaIn: number, oldAmt: number, oldType: string, oldWalletId: string) => {
-    // Reverse old effect
-    if (oldWalletId) {
-      const ow = data.wallets.find(x => x.id === oldWalletId);
-      if (ow) {
-        const reversed = oldType === "IN" ? (ow.balance || 0) - oldAmt : (ow.balance || 0) + oldAmt;
-        await updateItem("wallets", { ...ow, balance: reversed });
-      }
-    }
-    // Apply new effect
-    if (wId) {
-      const nw = data.wallets.find(x => x.id === wId);
-      if (nw) {
-        const updated = type === "IN" ? (nw.balance || 0) + deltaIn : (nw.balance || 0) - deltaIn;
-        // refetch in case same wallet was just updated
-        const fresh = data.wallets.find(x => x.id === wId);
-        const base = fresh?.balance ?? 0;
-        // Use the value we already computed by re-applying
-        await updateItem("wallets", { ...nw, balance: (oldWalletId === wId ? base : updated) });
-      }
-    }
-  };
-
   const handleSave = async () => {
     const amt = +amount || 0;
     if (!amt) { alert("Amount required"); return; }
 
+    // Wallet effect of an entry: + for money in, − for money out.
+    const signed = (t: string, amount: number) => (t === "IN" ? amount : -amount);
     if (editId) {
-      // Edit existing
       const old = data.accounting.find(a => a.id === editId);
       if (!old) { alert("Entry not found"); return; }
-
-      // Reverse old wallet effect
-      if (old.walletId) {
-        const ow = data.wallets.find(x => x.id === old.walletId);
-        if (ow) {
-          const reversed = old.type === "IN" ? (ow.balance || 0) - (old.amount || 0) : (ow.balance || 0) + (old.amount || 0);
-          await updateItem("wallets", { ...ow, balance: reversed });
-        }
+      // Undo the old effect and apply the new one as atomic increments.
+      const deltas: Record<string, number> = {};
+      if (old.walletId) deltas[old.walletId] = (deltas[old.walletId] || 0) - signed(old.type, Number(old.amount) || 0);
+      if (walletId) deltas[walletId] = (deltas[walletId] || 0) + signed(type, amt);
+      for (const [w, d] of Object.entries(deltas)) {
+        if (d && data.wallets.some((x) => x.id === w)) await adjustWallet(w, d, "Accounting entry edited");
       }
-      // Apply new wallet effect
-      if (walletId) {
-        const nw = data.wallets.find(x => x.id === walletId);
-        if (nw) {
-          // If same wallet, balance was already reversed above, so apply on the reversed value
-          const currBal = walletId === old.walletId
-            ? (type === "IN" ? (nw.balance || 0) - (old.amount || 0) : (nw.balance || 0) + (old.amount || 0))
-            : (nw.balance || 0);
-          const newBal = type === "IN" ? currBal + amt : currBal - amt;
-          await updateItem("wallets", { ...nw, balance: newBal });
-        }
-      }
-
       await updateItem("accounting", {
         ...old,
         date, type, clientId, projectId, category, walletId, amount: amt, desc,
@@ -105,14 +68,7 @@ export default function AccountingTab() {
       });
       alert("Entry updated ✅");
     } else {
-      // Add new
-      if (walletId) {
-        const w = data.wallets.find(x => x.id === walletId);
-        if (w) {
-          const newBal = type === "IN" ? (w.balance || 0) + amt : (w.balance || 0) - amt;
-          await updateItem("wallets", { ...w, balance: newBal });
-        }
-      }
+      if (walletId && data.wallets.some((x) => x.id === walletId)) await adjustWallet(walletId, signed(type, amt), category);
       await addItem("accounting", { id: uid("A"), date, type, clientId, projectId, category, walletId, amount: amt, desc, receipt: null, scope: type === "OUT" ? scope : "", createdAt: new Date().toISOString() });
     }
     clearForm();
@@ -134,12 +90,8 @@ export default function AccountingTab() {
 
   const handleDelete = async (a: any) => {
     if (!confirm("Delete entry?")) return;
-    if (a.walletId) {
-      const w = data.wallets.find(x => x.id === a.walletId);
-      if (w) {
-        const newBal = a.type === "IN" ? (w.balance || 0) - a.amount : (w.balance || 0) + a.amount;
-        await updateItem("wallets", { ...w, balance: newBal });
-      }
+    if (a.walletId && data.wallets.some((x) => x.id === a.walletId)) {
+      await adjustWallet(a.walletId, a.type === "IN" ? -(Number(a.amount) || 0) : Number(a.amount) || 0, "Accounting entry deleted");
     }
     await removeItem("accounting", a.id);
     if (editId === a.id) clearForm();

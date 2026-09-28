@@ -110,6 +110,8 @@ export function InvoiceA4({ inv, client, project, settings, qr }: Props) {
             <div style={{ display: "flex", justifyContent: "space-between" }}><span style={{ color: MUTED }}>Due date</span><b>{inv.dueDate || "On receipt"}</b></div>
             {inv.category && <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}><span style={{ color: MUTED }}>Service</span><b style={{ textAlign: "right" }}>{inv.category}</b></div>}
             {inv.paymentMethod && <div style={{ display: "flex", justifyContent: "space-between" }}><span style={{ color: MUTED }}>Payment</span><b>{inv.paymentMethod}</b></div>}
+            {inv.packageName && <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}><span style={{ color: MUTED }}>Package</span><b style={{ textAlign: "right" }}>{inv.packageName}</b></div>}
+            {inv.startDate && inv.endDate && <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}><span style={{ color: MUTED }}>Period</span><b>{inv.startDate} → {inv.endDate}</b></div>}
           </div>
         </div>
 
@@ -227,6 +229,8 @@ export function InvoicePOS({ inv, client, project, settings, qr }: Props) {
         {client?.phone && <div style={line}><span>Phone</span><span>{client.phone}</span></div>}
         {project?.title && <div style={line}><span>Project</span><span style={{ textAlign: "right" }}>{project.title}</span></div>}
         {inv.category && <div style={line}><span>Category</span><span style={{ textAlign: "right" }}>{inv.category}</span></div>}
+        {inv.packageName && <div style={line}><span>Package</span><span style={{ textAlign: "right" }}>{inv.packageName}</span></div>}
+        {inv.startDate && inv.endDate && <div style={line}><span>Period</span><span>{inv.startDate} → {inv.endDate}</span></div>}
       </div>
       <div style={dash} />
       <div style={{ ...line, fontSize: 9.5, fontWeight: 800, letterSpacing: 0.8, textTransform: "uppercase" }}><span>Item</span><span>Amount</span></div>

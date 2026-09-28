@@ -917,3 +917,15 @@ td { font-size: 13.5px; }
 .catalogTable .catSel { margin-top: 4px; font-size: 12px; }
 .catalogTable tr.inactive td { opacity: .55; }
 .catalogTable .setupFee { display: grid; gap: 2px; margin-top: 4px; }
+.urduText { font-family: "Noto Nastaliq Urdu", "Jameel Noori Nastaleeq", "Segoe UI", Tahoma, sans-serif; font-size: 15px; line-height: 1.9; }
+
+/* ---------- Invoice period, renewals, payments ---------- */
+.invPeriod { margin-top: 12px; border: 1px dashed var(--brand-300); border-radius: 14px; padding: 10px 12px; background: var(--brand-50); display: grid; gap: 6px; }
+.invPeriodHead { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; color: var(--brand); }
+.invPeriodGrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; align-items: end; }
+.invRenew { margin: 0 0 6px; }
+.renewals .renewList { display: grid; gap: 6px; margin-top: 10px; }
+.renewItem { display: grid; grid-template-columns: 1.4fr 1fr auto; gap: 10px; align-items: center; border: 1px solid var(--border); border-left: 4px solid #D97706; border-radius: 12px; padding: 9px 12px; background: var(--surface); }
+.renewItem.expired { border-left-color: #DC2626; }
+.payHistory { margin-top: 10px; display: grid; gap: 3px; background: var(--brand-50); border-radius: 10px; padding: 8px 10px; }
+@media (max-width: 700px) { .renewItem { grid-template-columns: 1fr; } }

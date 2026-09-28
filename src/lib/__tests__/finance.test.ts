@@ -121,3 +121,29 @@ describe("targets", () => {
     expect(p.requiredDaily).toBe(Math.ceil(400000 / 21));
   });
 });
+
+import { fillTemplate, lineTemplateKey, renderTemplate, OPT_OUT_RE } from "../waTemplates";
+describe("whatsapp templates", () => {
+  it("fills the Urdu payment message like the spec example", () => {
+    const t = renderTemplate({ companyName: "Digital Target" }, "payment_received", "ur", { name: "Ali", paid_now: "10,000", invoice: "#123", balance: 0 });
+    expect(t).toContain("Rs 10,000");
+    expect(t).toContain("موصول ہوگئی");
+    expect(t).toContain("#123");
+    expect(t).not.toContain("بقایا"); // no balance line when fully paid
+  });
+  it("admin override wins; missing placeholders are removed", () => {
+    const s = { waTemplates: { invoice: { en: "Hi {name}, invoice {invoice} {nothing}." } } };
+    expect(renderTemplate(s, "invoice", "en", { name: "Sara", invoice: "INV-1" })).toBe("Hi Sara, invoice INV-1 .".replace(" .", "."));
+    expect(fillTemplate("A {x} B", {})).toBe("A B");
+  });
+  it("picks a follow-up template by service line", () => {
+    expect(lineTemplateKey("Video Production")).toBe("line:Video Production");
+    expect(renderTemplate({}, lineTemplateKey("Video Production"), "en", { name: "A" })).toContain("video editing");
+    expect(lineTemplateKey("Something else")).toBe("lead_followup");
+  });
+  it("detects opt-out", () => {
+    expect(OPT_OUT_RE.test("please stop messaging")).toBe(true);
+    expect(OPT_OUT_RE.test("mujhe message na karein")).toBe(true);
+    expect(OPT_OUT_RE.test("price kya hai")).toBe(false);
+  });
+});

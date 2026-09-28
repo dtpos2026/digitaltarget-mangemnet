@@ -10,6 +10,8 @@ import {
   getDoc,
   query,
   where,
+  updateDoc,
+  increment,
 } from "firebase/firestore";
 
 export interface AppData {
@@ -197,6 +199,14 @@ function userDoc(workspaceUid: string, colName: string, docId: string) {
 export async function saveItem(workspaceUid: string, colName: string, item: any) {
   const id = item.id || uid();
   await setDoc(userDoc(workspaceUid, colName, id), { ...item, id });
+}
+
+/**
+ * Adds `delta` to a wallet balance atomically (Firestore increment), so two
+ * payments recorded at the same time cannot overwrite each other.
+ */
+export async function incrementWallet(workspaceUid: string, walletId: string, delta: number) {
+  await updateDoc(userDoc(workspaceUid, "wallets", walletId), { balance: increment(Math.round((Number(delta) || 0) * 100) / 100) });
 }
 
 export async function deleteItem(workspaceUid: string, colName: string, docId: string) {

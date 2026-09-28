@@ -12,6 +12,7 @@ import {
   saveItem,
   deleteItem,
   saveSettings,
+  incrementWallet,
   uid,
   ALL_COLLECTIONS,
   subscribeCollection,
@@ -26,6 +27,8 @@ interface DataContextType {
   removeItem: (col: string, id: string) => Promise<void>;
   updateItem: (col: string, item: any) => Promise<void>;
   updateSettings: (settings: any) => Promise<void>;
+  /** Atomic wallet balance change (+ in, − out). */
+  adjustWallet: (walletId: string, delta: number, reason?: string) => Promise<void>;
   reload: () => Promise<void>;
   restoreData: (jsonData: any) => Promise<void>;
   resetData: (scope: string, cutoffDate: string | null) => Promise<void>;
@@ -132,6 +135,21 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     logAudit({ action: "delete", collection: col, entityId: id, entityLabel: entityLabel(before) });
   };
 
+  const adjustWallet = async (walletId: string, delta: number, reason = "") => {
+    if (!workspaceUid || !walletId || !delta) return;
+    try {
+      await incrementWallet(workspaceUid, walletId, delta);
+    } catch (e) {
+      reportWriteError("update", "wallets", e);
+      throw e;
+    }
+    setData((prev) => ({
+      ...prev,
+      wallets: prev.wallets.map((w: any) => (w.id === walletId ? { ...w, balance: Math.round(((Number(w.balance) || 0) + delta) * 100) / 100 } : w)),
+    }));
+    logAudit({ action: "wallet.adjust", collection: "wallets", entityId: walletId, details: `${delta > 0 ? "+" : ""}${delta}${reason ? ` • ${reason}` : ""}` });
+  };
+
   const updateItem = async (col: string, item: any) => {
     if (!workspaceUid) return;
     const before = ((dataRef.current as any)[col] || []).find((x: any) => x.id === item.id);
@@ -234,7 +252,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <DataContext.Provider
-      value={{ data, loading, addItem, removeItem, updateItem, updateSettings, reload, restoreData, resetData, logAudit }}
+      value={{ data, loading, addItem, removeItem, updateItem, updateSettings, adjustWallet, reload, restoreData, resetData, logAudit }}
     >
       {children}
     </DataContext.Provider>
