@@ -7,6 +7,7 @@ import ConnectModal from "./ConnectModal";
 import CaptureModal from "./CaptureModal";
 import Inbox from "./Inbox";
 import WaWebView from "./WaWebView";
+import MessageCenter from "./MessageCenter";
 import ModuleInsights from "@/components/ModuleInsights";
 import {
   createMainAccount,
@@ -31,9 +32,9 @@ const STATUS_LABEL: Record<string, { text: string; cls: string }> = {
 };
 
 const VIEW_KEY = "dt.waView";
-type View = "web" | "inbox";
+type View = "web" | "inbox" | "campaign";
 
-export default function WhatsAppTab({ focusConversationId, openPhone }: { focusConversationId?: string | null; openPhone?: { phone: string; chatId?: string; n: number } | null }) {
+export default function WhatsAppTab({ focusConversationId, openPhone, openCampaign }: { focusConversationId?: string | null; openPhone?: { phone: string; chatId?: string; n: number } | null; openCampaign?: { ids: string[]; n: number } | null }) {
   const { workspaceUid, can, user } = useAuth();
   const { data, logAudit } = useData();
   const accounts = useAccounts(workspaceUid);
@@ -46,7 +47,7 @@ export default function WhatsAppTab({ focusConversationId, openPhone }: { focusC
   const [expected, setExpected] = useState("");
   const canManage = can("whatsapp.manage");
   const [chosenView, setChosenView] = useState<View | null>(() => {
-    try { const v = localStorage.getItem(VIEW_KEY); return v === "web" || v === "inbox" ? v : null; } catch { return null; }
+    try { const v = localStorage.getItem(VIEW_KEY); return v === "web" || v === "inbox" || v === "campaign" ? v : null; } catch { return null; }
   });
   // WhatsApp Web (browser extension, no server) is the default; the server
   // inbox is the default only where whatsapp-service has been set up.
@@ -57,6 +58,7 @@ export default function WhatsAppTab({ focusConversationId, openPhone }: { focusC
   };
   useEffect(() => { if (openPhone) setChosenView("web"); }, [openPhone]);
   useEffect(() => { if (focusConversationId) setChosenView("inbox"); }, [focusConversationId]);
+  useEffect(() => { if (openCampaign) setChosenView("campaign"); }, [openCampaign]);
 
   useEffect(() => onNavigate((d) => { if (d.tab === "whatsapp" && d.conversationId) setFocus(d.conversationId); }), []);
   useEffect(() => { if (focusConversationId) setFocus(focusConversationId); }, [focusConversationId]);
@@ -105,9 +107,22 @@ export default function WhatsAppTab({ focusConversationId, openPhone }: { focusC
   const switcher = (
     <div className="segmented waViewSwitch" role="tablist">
       <button role="tab" aria-selected={view === "web"} className={view === "web" ? "on" : ""} onClick={() => chooseView("web")}>🟢 WhatsApp Web</button>
+      {can("campaigns.manage") && <button role="tab" aria-selected={view === "campaign"} className={view === "campaign" ? "on" : ""} onClick={() => chooseView("campaign")}>📣 Message Center</button>}
       <button role="tab" aria-selected={view === "inbox"} className={view === "inbox" ? "on" : ""} onClick={() => chooseView("inbox")}>🗂 Server inbox</button>
     </div>
   );
+
+  if (view === "campaign") {
+    return (
+      <section className="card waTab">
+        <div className="waBar">
+          <div className="waBarInfo"><h2 style={{ margin: 0 }}>WhatsApp Message Center</h2><div className="small">Leads ko un ki service ke mutabiq follow-up — approve kar ke, aaram se.</div></div>
+          {switcher}
+        </div>
+        <MessageCenter preselect={openCampaign} />
+      </section>
+    );
+  }
 
   if (view === "web") {
     return (

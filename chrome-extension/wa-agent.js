@@ -88,7 +88,8 @@
     else if (type === "call_log") text = "[call]";
     else text = `[${type}]`;
     const remote = ser((key && key.remote) || m.from || "");
-    return { id: ser(key), fromMe, type, t: Number(m.t || 0) * 1000, text: String(text).slice(0, 4000), remote };
+    // ack: 1 sent to server, 2 delivered, 3 read (WhatsApp's own receipt).
+    return { id: ser(key), fromMe, type, t: Number(m.t || 0) * 1000, text: String(text).slice(0, 4000), remote, ack: Number(m.ack || 0) };
   }
 
   const wpp = {

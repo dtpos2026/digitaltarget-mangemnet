@@ -8,6 +8,10 @@ export interface NavDetail {
   phone?: string;
   /** WhatsApp chat id (e.g. "…@lid" when the number is hidden). */
   chatId?: string;
+  /** WhatsApp tab sub-view, e.g. "campaign" for the Message Center. */
+  view?: string;
+  /** Leads to pre-select (Message Center). */
+  leadIds?: string[];
 }
 
 const EVENT = "dt:navigate";

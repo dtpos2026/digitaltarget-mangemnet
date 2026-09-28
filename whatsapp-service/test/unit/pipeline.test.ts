@@ -42,7 +42,7 @@ describe("new WhatsApp contact → lead", () => {
     const [lead] = [...store.leads.values()];
     expect(lead).toMatchObject({
       name: "Bilal", phone: "03001234567", whatsapp: "03001234567", phoneE164: "923001234567",
-      source: "WhatsApp", status: "New", serviceType: "Digital Marketing", conversationId: "923001234567", createdBy: "whatsapp-service",
+      source: "WhatsApp", status: "New", serviceType: "Meta Ads (Facebook + Instagram)", conversationId: "923001234567", createdBy: "whatsapp-service",
       date: localDate(1790000000000, "Asia/Karachi"),
     });
     expect(lead.id).toMatch(/^LD-/);

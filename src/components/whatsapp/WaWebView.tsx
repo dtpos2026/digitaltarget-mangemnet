@@ -4,6 +4,7 @@ import { useData } from "@/contexts/DataContext";
 import { uid, todayISO } from "@/lib/db";
 import { classifyChat } from "@/lib/chatClassifier";
 import { findLeadForChat, planCapture } from "@/lib/leadCapture";
+import { analyzeLead, applyAnalysis } from "@/lib/leadAnalysis";
 import { LEAD_STATUSES } from "@/lib/leads";
 import { linesOf } from "@/lib/catalog";
 import { formatLocalPhone, normalizePhone } from "@/lib/phone";
@@ -147,9 +148,16 @@ export default function WaWebView({ openPhone }: { openPhone?: { phone: string; 
         data.leads,
         { updateExisting: true, newId: () => uid("LD"), today: todayISO(), createdBy: user?.uid || "whatsapp-web" }
       );
-      if (plan.kind === "create") { await addItem("leads", plan.lead); setNote(`✓ Nayi lead bani: ${plan.lead.name} (${plan.lead.serviceType} • ${plan.lead.status})`); }
-      else if (plan.kind === "update") { await updateItem("leads", { ...plan.lead, ...plan.patch, updatedAt: new Date().toISOString() }); setNote("✓ Lead update ho gayi"); }
-      else setNote("Lead pehle se up-to-date hai");
+      const lines = active.messages.filter((m) => m.type !== "call_log").map((m) => ({ text: m.text, fromMe: m.fromMe }));
+      if (plan.kind === "create") {
+        const lead = applyAnalysis(plan.lead, analyzeLead(plan.lead, data.settings), { moveStatus: false, by: user?.email || "" });
+        await addItem("leads", lead);
+        setNote(`✓ Nayi lead bani: ${lead.name} (${lead.serviceType} • ${lead.status} • ${lead.ai.level} ${lead.ai.interest}%)`);
+      } else {
+        const merged = { ...plan.lead, ...(plan.kind === "update" ? plan.patch : {}), chat: lines.slice(-20), updatedAt: new Date().toISOString() };
+        await updateItem("leads", applyAnalysis(merged, analyzeLead(merged, data.settings), { by: user?.email || "" }));
+        setNote(plan.kind === "update" ? "✓ Lead update ho gayi (AI analysis ke sath)" : "✓ AI analysis update ho gaya");
+      }
     } catch (e) { setNote("Save nahi hua: " + (e as Error).message); }
     setBusy("");
   };

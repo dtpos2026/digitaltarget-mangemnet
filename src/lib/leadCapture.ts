@@ -3,6 +3,7 @@
 // Used by "Capture Leads" (all chats) and "Save this chat as lead".
 import { classifyChat, ChatLine, ChatSuggestion } from "./chatClassifier";
 import { formatLocalPhone, leadPhones } from "./phone";
+import { withHistory } from "./leadHistory";
 
 // Pipeline order; a capture only moves a lead forward (or to Lost / Converted).
 const ORDER = ["New", "Contacted", "Interested", "Follow-up", "Qualified", "Proposal", "Negotiation", "Converted"];
@@ -70,7 +71,12 @@ export function planCapture(
     if (chat.conversationId && !existing.conversationId) patch.conversationId = chat.conversationId;
     if (chat.jid && !existing.waJid) patch.waJid = chat.jid;
     if (chat.phone && !existing.phone) { patch.phone = formatLocalPhone(chat.phone); patch.phoneE164 = chat.phone; }
-    return Object.keys(patch).length ? { kind: "update", lead: existing, patch, s } : { kind: "same", lead: existing, s };
+    if (Object.keys(patch).length) {
+      const what = [patch.status ? `status → ${patch.status}` : "", patch.serviceType ? `service: ${patch.serviceType}` : ""].filter(Boolean).join(", ");
+      patch.history = withHistory(existing, { type: "captured", text: `WhatsApp chat se update${what ? ` (${what})` : ""}`, by: opts.createdBy }).history;
+      return { kind: "update", lead: existing, patch, s };
+    }
+    return { kind: "same", lead: existing, s };
   }
   const phone = chat.phone ? formatLocalPhone(chat.phone) : "";
   const chatText = lines.length ? transcript(lines, chat.name) : "";
@@ -81,6 +87,7 @@ export function planCapture(
     date: chat.firstAt ? new Date(chat.firstAt).toISOString().slice(0, 10) : opts.today,
     createdAt: new Date().toISOString(), createdBy: opts.createdBy,
     conversationId: chat.conversationId || "", waJid: chat.jid || "", assignedTo: chat.assignedTo || "",
+    chat: lines.slice(-20).map((l) => ({ text: l.text.slice(0, 500), fromMe: l.fromMe })),
   };
-  return { kind: "create", lead, s };
+  return { kind: "create", lead: withHistory(lead, { type: "captured", text: `WhatsApp chat se lead bani • ${lead.serviceType} • ${lead.status}`, by: opts.createdBy }), s };
 }

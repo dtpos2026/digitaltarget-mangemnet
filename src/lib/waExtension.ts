@@ -17,7 +17,7 @@ export interface WaExtChat {
   unread: number;
   archived: boolean;
 }
-export interface WaExtMessage { id: string; fromMe: boolean; type: string; t: number; text: string; remote?: string }
+export interface WaExtMessage { id: string; fromMe: boolean; type: string; t: number; text: string; remote?: string; ack?: number }
 export interface WaExtState {
   ready: boolean;
   authenticated: boolean;

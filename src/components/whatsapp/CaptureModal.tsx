@@ -5,6 +5,7 @@ import { useData } from "@/contexts/DataContext";
 import { uid, todayISO } from "@/lib/db";
 import { ChatLine } from "@/lib/chatClassifier";
 import { CaptureChat, planCapture } from "@/lib/leadCapture";
+import { analyzeLead, applyAnalysis } from "@/lib/leadAnalysis";
 import { formatLocalPhone } from "@/lib/phone";
 import { isSkippedJid, phoneFromJid, realJid, waExt } from "@/lib/waExtension";
 import { conversationName, updateConversation, WaConversation } from "./useWhatsApp";
@@ -88,6 +89,8 @@ export default function CaptureModal({ source, onClose }: { source: CaptureSourc
         const plan = planCapture(chat, ls, leads, { updateExisting, newId: () => uid("LD"), today: todayISO(), createdBy: "chat-capture" });
         const reason = plan.s.reason;
         if (plan.kind === "create") {
+          // AI analysis on capture: type, interest estimate, next action, follow-up.
+          plan.lead = applyAnalysis(plan.lead, analyzeLead(plan.lead, data.settings), { moveStatus: false, by: "chat-capture" });
           await addItem("leads", plan.lead);
           leads.push(plan.lead);
           if (chat.conversationId && source.kind === "service") await updateConversation(source.ws, chat.conversationId, { leadId: plan.lead.id });
@@ -95,7 +98,8 @@ export default function CaptureModal({ source, onClose }: { source: CaptureSourc
         } else {
           const lead = plan.lead;
           if (plan.kind === "update") {
-            const next = { ...lead, ...plan.patch, updatedAt: new Date().toISOString() };
+            const merged = { ...lead, ...plan.patch, chat: ls.slice(-20), updatedAt: new Date().toISOString() };
+            const next = applyAnalysis(merged, analyzeLead(merged, data.settings), { moveStatus: false, by: "chat-capture" });
             await updateItem("leads", next);
             leads[leads.indexOf(lead)] = next;
           }

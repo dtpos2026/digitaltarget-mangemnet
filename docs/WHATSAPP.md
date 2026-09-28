@@ -33,6 +33,41 @@ Limits:
 - Each team member who handles WhatsApp installs the extension on their computer.
 - **Tested:** the extension, routing, capture, send, the Leads→Chat flow and the standalone panel were tested end-to-end in Chromium against a mock WhatsApp Web page. A real QR scan could not be tested because the build sandbox blocks WhatsApp.
 
+## Leads CRM, AI analysis and the Message Center
+
+**Leads tab**
+- **Date filters:** Sab, 3 / 7 / 15 din, Is mahine, and Custom (from–to).
+- **Other filters:** service, status, lead type (Ads lead / Unsaved number / Saved contact), AI interest (Hot / Warm / Cold) and a search box.
+- **Selection:** tick leads one by one, or use Select all / Clear.
+- **Bulk actions on selected leads:**
+  - ✨ AI analyze;
+  - 📣 Message Center;
+  - 🗑 Delete — needs a confirmation, and 10 or more leads also need the count typed in.
+- **AI analysis** (`src/lib/leadAnalysis.ts`, rule-based, in the browser):
+  - It works on captured WhatsApp chats and on older leads whose chat is only in the notes.
+  - It finds: the service line (only lines that exist in the catalog), the lead type, an interest % (labelled as an **estimate**, not a guarantee), suggested status, potential value (budget mentioned in the chat, else the catalog price), whether a follow-up is needed and when, the next action, and opt-out.
+  - It runs automatically on capture, and re-runs when a reply arrives.
+- **Lead profile:** details, AI card, conversation, and a full history. The history lists created / captured, status changes, AI runs, messages sent, replies, notes, conversion and opt-out.
+
+**Message Center** (WhatsApp tab, permission *WhatsApp Message Center & Campaigns*)
+- Pick leads (from the Leads selection, or by status / service / days).
+- The template is chosen **automatically by each lead's service**, for example Meta Ads, Video Editing, DTPOS or Retail POS, in Urdu, English or Custom. Every message is previewed and can be edited before approval.
+- **Safety built in** — the Message Center is not a bulk-spam tool:
+  - Consent must be confirmed. The campaign is only for people who contacted you.
+  - Opt-outs ("stop", "message na karein", "not interested"…) are stored in `optOuts/` and never messaged again.
+  - Invalid, duplicate and Lost numbers are skipped, and the reason is shown.
+  - The minimum delay is 30 s (60 s in Screen mode). The daily limit is at most 200 across all campaigns.
+  - The campaign **auto-pauses** when:
+    - the daily limit is reached;
+    - 3 sends fail in a row;
+    - more than 30% of sends fail;
+    - WhatsApp is disconnected;
+    - several recipients opt out.
+- **Controls:** Pause / Resume / Stop, plus an optional start time. The campaign runs while the portal tab is open, and after a reload it shows "interrupted" with Resume.
+- **Status per message:** queued, sent, delivered (from WhatsApp's own tick, in Fast mode), replied, failed, skipped.
+- **Replies** are checked every 2 minutes (or with the button). A reply is saved to the lead's conversation, the lead is re-analysed, and opt-outs are recorded.
+- **Analytics per campaign:** selected, sent, delivered, failed, skipped, replies, interested, converted and response %.
+
 ## Option 2 — Server (24/7 capture, QR / linked device)
 
 The portal links **0345-1873354** the way WhatsApp Web does: an admin clicks

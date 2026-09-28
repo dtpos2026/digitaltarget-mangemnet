@@ -43,7 +43,7 @@ describe("planCapture", () => {
     );
     expect(plan.kind).toBe("create");
     if (plan.kind !== "create") return;
-    expect(plan.lead).toMatchObject({ id: "LD-NEW", name: "Ali Khan", phone: "03001112222", phoneE164: "923001112222", source: "WhatsApp", serviceType: "Digital Marketing", waJid: "923001112222@c.us" });
+    expect(plan.lead).toMatchObject({ id: "LD-NEW", name: "Ali Khan", phone: "03001112222", phoneE164: "923001112222", source: "WhatsApp", serviceType: "Meta Ads (Facebook + Instagram)", waJid: "923001112222@c.us" });
     expect(plan.lead.status).toBe("Interested");
     expect(plan.lead.notes).toContain("Ali Khan: price kitni hogi monthly?");
     expect(plan.lead.notes).toContain("Hum: Ji zaroor");

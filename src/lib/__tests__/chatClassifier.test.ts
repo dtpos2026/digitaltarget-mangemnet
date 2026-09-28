@@ -5,13 +5,20 @@ const them = (text: string) => ({ text, fromMe: false });
 const me = (text: string) => ({ text, fromMe: true });
 
 describe("classifyChat", () => {
-  it("new inquiry about ads → Digital Marketing, New", () => {
+  it("new inquiry about ads → Meta Ads, New", () => {
     expect(classifyChat([them("Assalam o alaikum"), them("Facebook ads chalwane hain restaurant ke liye")]))
-      .toMatchObject({ line: "Digital Marketing", status: "New" });
+      .toMatchObject({ line: "Meta Ads (Facebook + Instagram)", status: "New" });
   });
   it("asks price after our reply → Interested", () => {
     expect(classifyChat([them("Mujhe POS software chahiye"), me("Ji zaroor"), them("Price kitne ki hai?")]))
-      .toMatchObject({ line: "AI Software Development", status: "Interested" });
+      .toMatchObject({ line: "Retail POS", status: "Interested" });
+  });
+  it("matches specific catalog lines, not Roman Urdu 'app' (= aap)", () => {
+    expect(classifyChat([them("restaurant software chahiye table management ke sath")]).line).toBe("Restaurant Software / DTPOS");
+    expect(classifyChat([them("mujhe 10 reels edit karwani hain")]).line).toBe("Video Editing");
+    expect(classifyChat([them("app kitne ka karte ho logo")]).line).toBe("Graphic Design");
+    expect(classifyChat([them("android app banwani hai")]).line).toBe("Mobile Apps / App Development");
+    expect(classifyChat([them("google ads chalwane hain")]).line).toBe("Google Ads");
   });
   it("payment message → Converted", () => {
     expect(classifyChat([them("Logo design karwana hai"), me("15k"), them("Theek hai advance bhej diya hai")]).status).toBe("Converted");

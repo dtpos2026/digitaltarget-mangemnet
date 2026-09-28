@@ -1,0 +1,195 @@
+// AI lead analysis (rule-based, runs in the browser).
+//
+// Builds on chatClassifier (service line + status) and adds: lead type
+// (ads / unsaved number / saved contact), an interest *estimate*, potential
+// value, follow-up need and a suggested next action. The service line is
+// always one that exists in the catalog — nothing new is invented.
+//
+// The interest % is an estimate from the conversation, not a promise of
+// conversion; the UI labels it that way.
+import { ChatLine, classifyChat } from "./chatClassifier";
+import { activeServicesOf, categoryOfLine, firstInvoiceAmount, linesOf } from "./catalog";
+import { shouldMoveStatus } from "./leadCapture";
+import { OPT_OUT_RE } from "./waTemplates";
+import { withHistory } from "./leadHistory";
+export { withHistory } from "./leadHistory";
+export type { LeadEvent } from "./leadHistory";
+
+export type LeadType = "ads" | "unsaved" | "saved" | "other";
+export type InterestLevel = "Hot" | "Warm" | "Cold";
+
+/** Badge colour for an interest level. */
+export const levelClass = (lvl?: string) => (lvl === "Hot" ? "bad" : lvl === "Warm" ? "warn" : "");
+
+export const LEAD_TYPE_LABEL: Record<LeadType, string> = {
+  ads: "Ads lead", unsaved: "Unsaved number", saved: "Saved contact", other: "Other source",
+};
+
+export interface LeadAI {
+  version: 1;
+  analyzedAt: string;
+  line: string | null;
+  category: string | null;
+  leadType: LeadType;
+  /** 0–100, an estimate from the chat. */
+  interest: number;
+  level: InterestLevel;
+  suggestedStatus: string;
+  statusReason: string;
+  potentialValue: number;
+  valueBasis: "chat budget" | "catalog price" | "none";
+  followUp: { required: boolean; date: string; reason: string };
+  nextAction: string;
+  lastMessage: string;
+  lastFromMe: boolean;
+  customerMessages: number;
+  optOut: boolean;
+}
+
+/**
+ * Conversation lines of a lead: a stored chat if there is one, otherwise the
+ * transcript that capture wrote into notes ("Name: text" / "Hum: text").
+ */
+export function conversationOf(lead: { chat?: ChatLine[]; notes?: string; name?: string }): ChatLine[] {
+  if (Array.isArray(lead.chat) && lead.chat.length) return lead.chat;
+  const notes = String(lead.notes || "");
+  if (!notes.trim()) return [];
+  return notes
+    .split("\n")
+    .map((l) => l.trim())
+    .filter((l) => l && !/^whatsapp chat:?$/i.test(l))
+    .map((l) => {
+      const m = l.match(/^([^:]{1,40}):\s*(.*)$/);
+      if (!m) return { text: l, fromMe: false };
+      const who = m[1].trim().toLowerCase();
+      return { text: m[2], fromMe: who === "hum" || who === "me" || who === "we" };
+    });
+}
+
+const ADS_SOURCE = /\b(ads?|facebook|fb|instagram|insta|meta|tiktok|google|campaign|sponsored|boost)\b/i;
+const ADS_CHAT = /\b(ad dekha|ad dekhi|aap ka ad|your ad|saw (your|the) ad|ad se|ads? par|sponsored|click to whatsapp)\b/i;
+const looksLikeNumber = (s?: string) => !s || /^\+?[\d\s()-]{7,}$/.test(s.trim());
+
+export function leadTypeOf(lead: { source?: string; name?: string }, lines: ChatLine[]): LeadType {
+  const chat = lines.map((l) => l.text).join(" ");
+  if (ADS_SOURCE.test(String(lead.source || "")) || ADS_CHAT.test(chat)) return "ads";
+  if (looksLikeNumber(lead.name)) return "unsaved";
+  if (/whatsapp/i.test(String(lead.source || ""))) return "saved";
+  return "other";
+}
+
+/** "budget 20k", "Rs 15,000", "50 hazar", "1.5 lakh" → rupees. */
+export function budgetFromChat(lines: ChatLine[]): number {
+  const text = lines.filter((l) => !l.fromMe).map((l) => l.text).join(" ");
+  const m = text.match(/(?:budget|rs\.?|pkr|rupees?)\s*[:-]?\s*(\d[\d,]*(?:\.\d+)?)\s*(k|hazar|hazaar|thousand|lakh|lac)?/i)
+    || text.match(/(\d[\d,]*(?:\.\d+)?)\s*(k|hazar|hazaar|thousand|lakh|lac)\b/i);
+  if (!m) return 0;
+  let n = parseFloat(m[1].replace(/,/g, ""));
+  const unit = (m[2] || "").toLowerCase();
+  if (unit === "k" || unit.startsWith("hazar") || unit === "thousand") n *= 1000;
+  if (unit === "lakh" || unit === "lac") n *= 100000;
+  return n >= 500 && n <= 50_000_000 ? Math.round(n) : 0;
+}
+
+const BASE: Record<string, number> = {
+  New: 30, Contacted: 35, Interested: 60, "Follow-up": 50, Qualified: 65, Proposal: 70, "Meeting Scheduled": 70,
+  "Demo Given": 70, Negotiation: 75, Converted: 100, Lost: 5, Invalid: 0,
+};
+const PRICE_ASK = /\b(price|rate|rates|kitne|kitna|charges|cost|package|fee|quotation|quote)\b/i;
+const DEMO_ASK = /\b(demo|meeting|milna|visit|call (karein|kr|karo)|sample|portfolio)\b/i;
+const LATER = /\b(baad mein|bad me|baad me|sochta|soch k|later|next week|agle hafte)\b/i;
+const SOFTWARE_CATS = ["Software Development", "Development"];
+
+const addDays = (from: Date, n: number) => new Date(from.getTime() + n * 864e5).toISOString().slice(0, 10);
+
+export function analyzeLead(lead: any, settings: unknown, today = new Date()): LeadAI {
+  const lines = conversationOf(lead);
+  const cls = classifyChat(lines);
+  const known = linesOf(settings);
+  // Only lines that exist in the catalog; otherwise keep the lead's own.
+  const line = cls.line && known.includes(cls.line) ? cls.line : lead.serviceType && known.includes(lead.serviceType) ? lead.serviceType : null;
+  const category = line ? categoryOfLine(line) : null;
+  const theirs = lines.filter((l) => !l.fromMe);
+  const theirText = theirs.map((l) => l.text).join(" ");
+  const last = lines[lines.length - 1];
+  const optOut = !!lead.optOut || theirs.some((l) => OPT_OUT_RE.test(l.text));
+
+  // Current status: the lead's own, moved forward by the chat when it says more.
+  const current = lead.status || "New";
+  const suggestedStatus = optOut ? "Lost" : shouldMoveStatus(current, cls.status) ? cls.status : current;
+
+  let interest = BASE[suggestedStatus] ?? 30;
+  if (PRICE_ASK.test(theirText)) interest += 10;
+  if (budgetFromChat(lines) > 0) interest += 10;
+  if (DEMO_ASK.test(theirText)) interest += 10;
+  interest += Math.min(10, Math.max(0, theirs.length - 1) * 5);
+  if (LATER.test(theirs[theirs.length - 1]?.text || "")) interest -= 10;
+  const lastDate = String(lead.lastMessageAt || lead.updatedAt || lead.date || lead.createdAt || "").slice(0, 10);
+  if (lastDate && (today.getTime() - new Date(`${lastDate}T12:00:00`).getTime()) / 864e5 > 14) interest -= 15;
+  if (suggestedStatus === "Converted") interest = 100;
+  if (optOut || suggestedStatus === "Lost" || suggestedStatus === "Invalid") interest = Math.min(interest, 5);
+  interest = Math.max(0, Math.min(100, Math.round(interest)));
+  const level: InterestLevel = interest >= 70 ? "Hot" : interest >= 40 ? "Warm" : "Cold";
+
+  // Potential value: budget said in the chat, else the catalog price for the line.
+  const budget = budgetFromChat(lines);
+  let potentialValue = budget;
+  let valueBasis: LeadAI["valueBasis"] = budget ? "chat budget" : "none";
+  if (!budget && line) {
+    const svc = activeServicesOf(settings).filter((s) => s.line === line);
+    if (svc.length) {
+      potentialValue = Math.round(svc.reduce((s, x) => s + firstInvoiceAmount(x), 0) / svc.length);
+      valueBasis = "catalog price";
+    }
+  }
+
+  // Follow-up.
+  const closed = ["Converted", "Lost", "Invalid"].includes(suggestedStatus) || optOut;
+  const unanswered = !!last && !last.fromMe;
+  const overdue = lead.followUpDate && lead.followUpDate < today.toISOString().slice(0, 10);
+  const stale = lastDate && (today.getTime() - new Date(`${lastDate}T12:00:00`).getTime()) / 864e5 >= 2;
+  const required = !closed && (unanswered || !!overdue || !!stale || !lead.followUpDate);
+  const date = lead.followUpDate && !overdue ? lead.followUpDate : addDays(today, level === "Hot" || unanswered ? 0 : level === "Warm" ? 1 : 3);
+  const reason = closed ? "Lead band hai" : unanswered ? "Customer ka aakhri message jawab ka intezar kar raha hai"
+    : overdue ? `Follow-up ki tareekh (${lead.followUpDate}) guzar gayi` : stale ? "2+ din se koi baat nahi hui" : "Follow-up date set nahi";
+
+  // Next action.
+  const cat = category || "";
+  let nextAction: string;
+  if (optOut) nextAction = "Customer ne message band karne ko kaha — dobara message na karein";
+  else if (suggestedStatus === "Converted") nextAction = "Client banayein aur invoice / advance ka record karein";
+  else if (suggestedStatus === "Lost") nextAction = "Abhi koi action nahi — 2-3 mahine baad naya offer bhej sakte hain";
+  else if (unanswered) nextAction = `Customer ka jawab dein${PRICE_ASK.test(last?.text || "") ? " — price / package bhejein" : ""}`;
+  else if (["Proposal", "Negotiation"].includes(suggestedStatus)) nextAction = "Proposal par follow-up karein aur advance payment ki baat karein";
+  else if (suggestedStatus === "Interested" || level === "Hot") {
+    nextAction = SOFTWARE_CATS.includes(cat) ? "Demo schedule karein (call / visit)"
+      : cat === "Digital Marketing" ? "Ads package aur budget plan bhejein, business / city poochhein"
+      : cat === "Creative Services" ? "Portfolio / samples bhejein aur quantity poochhein"
+      : "Details aur price bhej kar meeting rakhein";
+  } else if (suggestedStatus === "Follow-up") nextAction = "Follow-up call / message karein";
+  else nextAction = line ? `${line} ki details / price list bhejein aur zarurat poochhein` : "Zarurat poochhein (kaun si service chahiye)";
+
+  return {
+    version: 1, analyzedAt: new Date().toISOString(), line, category, leadType: leadTypeOf(lead, lines),
+    interest, level, suggestedStatus, statusReason: cls.reason, potentialValue, valueBasis,
+    followUp: { required, date, reason }, nextAction,
+    lastMessage: (last?.text || "").slice(0, 200), lastFromMe: !!last?.fromMe, customerMessages: theirs.length, optOut,
+  };
+}
+
+/**
+ * Lead with the analysis applied: fills service and type, moves the status
+ * forward only, sets a follow-up date if none, records history.
+ */
+export function applyAnalysis(lead: any, ai: LeadAI, opts: { moveStatus?: boolean; by?: string } = {}) {
+  let next = { ...lead, ai, leadType: ai.leadType, interest: ai.interest, updatedAt: new Date().toISOString() };
+  const changes: string[] = [];
+  if (!lead.serviceType && ai.line) { next.serviceType = ai.line; changes.push(`service: ${ai.line}`); }
+  if (opts.moveStatus !== false && ai.suggestedStatus !== (lead.status || "New") && shouldMoveStatus(lead.status || "New", ai.suggestedStatus)) {
+    next.status = ai.suggestedStatus; changes.push(`status: ${lead.status || "New"} → ${ai.suggestedStatus}`);
+  }
+  if (ai.optOut && !lead.optOut) { next.optOut = true; changes.push("opt-out"); }
+  if (!lead.followUpDate && ai.followUp.required) { next.followUpDate = ai.followUp.date; changes.push(`follow-up ${ai.followUp.date}`); }
+  next = withHistory(next, { type: "ai", text: `AI: ${ai.level} (${ai.interest}%)${ai.line ? ` • ${ai.line}` : ""}${changes.length ? ` • ${changes.join(", ")}` : ""}`, by: opts.by });
+  return next;
+}

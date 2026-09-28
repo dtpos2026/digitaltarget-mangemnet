@@ -72,12 +72,14 @@ export default function MainApp() {
 
   const [waFocus, setWaFocus] = useState<string | null>(null);
   const [waPhone, setWaPhone] = useState<{ phone: string; chatId?: string; n: number } | null>(null);
+  const [waCampaign, setWaCampaign] = useState<{ ids: string[]; n: number } | null>(null);
   useEffect(
     () => onNavigate((d) => {
       if (!TABS.find((t) => t.id === d.tab)) return;
       setActiveTab(d.tab);
       if (d.tab === "whatsapp" && d.conversationId) setWaFocus(d.conversationId);
       if (d.tab === "whatsapp" && (d.phone || d.chatId)) setWaPhone({ phone: d.phone || "", chatId: d.chatId, n: Date.now() });
+      if (d.tab === "whatsapp" && d.view === "campaign") setWaCampaign({ ids: d.leadIds || [], n: Date.now() });
     }),
     [TABS]
   );
@@ -135,7 +137,7 @@ export default function MainApp() {
     }
     switch (activeTab) {
       case "dash": return <DashboardTab />;
-      case "whatsapp": return <WhatsAppTab focusConversationId={waFocus} openPhone={waPhone} />;
+      case "whatsapp": return <WhatsAppTab focusConversationId={waFocus} openPhone={waPhone} openCampaign={waCampaign} />;
       case "performance": return <PerformanceTab />;
       case "clients": return <ClientsTab />;
       case "projects": return <ProjectsTab />;
