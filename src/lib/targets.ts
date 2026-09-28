@@ -224,7 +224,8 @@ export function targetProgress(data: any, month = monthKey(), today = new Date()
   return {
     month, target: t.revenue, achieved, remaining,
     pct: t.revenue ? Math.round((achieved / t.revenue) * 100) : 0,
-    daysLeft, requiredDaily, requiredWeekly: requiredDaily * 7,
+    // With fewer than 7 days left the "weekly" need is simply what remains.
+    daysLeft, requiredDaily, requiredWeekly: Math.min(remaining, requiredDaily * 7),
     onPace: achieved >= t.revenue * (dayNo / days),
   };
 }

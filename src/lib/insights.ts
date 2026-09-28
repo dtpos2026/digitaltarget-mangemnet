@@ -33,6 +33,10 @@ export interface Analysis {
 const ym = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 const pctChange = (a: number, b: number) => (b ? Math.round(((a - b) / b) * 100) : a > 0 ? 100 : 0);
 const rs = (n: number) => `Rs ${Math.round(n).toLocaleString("en-PK")}`;
+const avgDealOf = (invoices: any[]) => {
+  const v = invoices.map(invoiceView).filter((x) => x.grandTotal > 0);
+  return v.length ? v.reduce((s, x) => s + x.grandTotal, 0) / v.length : 0;
+};
 const daysBetween = (a: string, b: string) => Math.round((new Date(b).getTime() - new Date(a).getTime()) / 86400000);
 
 // Income / expense rules come from finance.ts so every screen agrees.
@@ -230,6 +234,57 @@ export function analyzeBusiness(data: any, today = new Date()): Analysis {
     insights.push({ id: "top-line", severity: "good", area: "Growth", title: `Sab se zyada billing: ${topLine} (${Math.round((amt / lineTotal) * 100)}%)`,
       detail: ranked.slice(0, 4).map(([l, n]) => `${l} ${rs(n)}`).join(" • "),
       action: ranked.length > 1 ? `${topLine} ke clients ko ${ranked[1][0]} bhi offer karein (cross-sell).` : `Doosri services (${topLine} ke ilawa) bhi offer karein.` });
+  }
+
+  // ---------- weak service: leads come in, money does not ----------
+  const since90 = new Date(today.getTime() - 90 * 864e5).toISOString().slice(0, 10);
+  const leadsByLine: Record<string, number> = {};
+  for (const l of leads) if (l.serviceType && String(l.date || l.createdAt || "").slice(0, 10) >= since90) leadsByLine[l.serviceType] = (leadsByLine[l.serviceType] || 0) + 1;
+  const weak = Object.entries(leadsByLine)
+    .filter(([line, n]) => n >= 3 && (byLine[line] || 0) < Math.max(lineTotal * 0.05, 1))
+    .sort((a, b) => b[1] - a[1])[0];
+  if (weak) {
+    insights.push({ id: "weak-line", severity: "warn", area: "Growth", title: `${weak[0]}: ${weak[1]} leads, lekin billing na hone ke barabar`,
+      detail: "Is service ki demand hai magar sale nahi ho rahi — price, offer ya follow-up check karein.",
+      action: `${weak[0]} ka starter package / demo offer banayein aur in leads ko follow-up bhejein.` });
+  }
+
+  // ---------- renewals near ----------
+  const renewSoon = invoices.filter((i) => {
+    if (!i.endDate || i.renewal === false || i.renewedBy || invoices.some((x) => x.renewalOf === i.id)) return false;
+    const left = Math.round((new Date(`${i.endDate}T00:00:00`).getTime() - new Date(`${todayIso}T00:00:00`).getTime()) / 864e5);
+    return left >= -7 && left <= 10;
+  });
+  if (renewSoon.length) {
+    const names = renewSoon.slice(0, 3).map((i) => clients.find((c) => c.id === i.clientId)?.name || i.invoiceNo || i.id).join(", ");
+    insights.push({ id: "renewals", severity: "warn", area: "Revenue", title: `${renewSoon.length} packages ka renewal qareeb`,
+      detail: `${names}${renewSoon.length > 3 ? "…" : ""} — waqt par renewal se recurring income bachti hai.`,
+      action: "Invoices → Renewals se WhatsApp renewal reminder bhejein aur Renew karein." });
+  }
+
+  // ---------- marketing return: cost per lead / per sale ----------
+  const mStart = `${ym(today)}-01`;
+  const lastStart = `${ym(new Date(today.getFullYear(), today.getMonth() - 1, 1))}-01`;
+  const marketing = accounting.filter((a) => isExpense(a) && /ads?|marketing|boost|campaign/i.test(String(a.category || "")) && String(a.date) >= lastStart);
+  const mSpend = marketing.reduce((s, a) => s + (Number(a.amount) || 0), 0);
+  const mLeads = leads.filter((l) => String(l.date || l.createdAt || "").slice(0, 10) >= lastStart && /ad|facebook|instagram|google|tiktok/i.test(String(l.source || ""))).length;
+  if (mSpend > 0) {
+    const cpl = mLeads ? mSpend / mLeads : 0;
+    insights.push(mLeads
+      ? { id: "cpl", severity: cpl > avgDealOf(invoices) * 0.3 ? "warn" : "info", area: "Expenses", title: `Ads kharcha ${rs(mSpend)} → ${mLeads} ads leads (${rs(cpl)} per lead)`,
+          detail: "Pichle 2 mahine ka apna ads kharcha aur ads se aayi leads.",
+          action: cpl > avgDealOf(invoices) * 0.3 ? "Cost per lead zyada hai — ad targeting / creative badlein ya kam performing ad band karein." : "Jo ad chal raha hai us ka budget thora barhayein (leads sasti aa rahi hain)." }
+      : { id: "cpl", severity: "warn", area: "Expenses", title: `Ads par ${rs(mSpend)} kharch, lekin koi ads lead darj nahi`,
+          detail: "Ya leads ka source sahi darj nahi ho raha, ya ads kaam nahi kar rahe.",
+          action: "Leads mein Source 'Facebook Ads' / 'Instagram' sahi likhein aur ad performance check karein." });
+  }
+
+  // ---------- outsource / team cost ----------
+  const teamCost = accounting.filter((a) => isExpense(a) && /team|salary|payout|designer|editor|developer/i.test(String(a.category || "")) && String(a.date) >= mStart).reduce((s, a) => s + (Number(a.amount) || 0), 0);
+  if (thisMonth.income > 0 && teamCost / thisMonth.income > 0.45) {
+    insights.push({ id: "outsource", severity: "warn", area: "Team", title: `Team ka kharcha income ka ${Math.round((teamCost / thisMonth.income) * 100)}%`,
+      detail: "Fixed salary zyada aur kaam kam ho to munafa kam hota hai.",
+      action: "Kam aane wala kaam (video shoot, special design) per-project freelancer ko dein; mustaqil team sirf roz ke kaam par rakhein." });
   }
 
   // ---------- team dues ----------

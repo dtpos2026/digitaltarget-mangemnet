@@ -1012,3 +1012,36 @@ td { font-size: 13.5px; }
 .historyTabs { flex-wrap: wrap; margin: 8px 0; }
 .historyBody { max-height: 68vh; overflow-y: auto; }
 .historyBody .modList li { grid-template-columns: 0 1fr 0; }
+.gtList li { grid-template-columns: auto 1fr auto auto; }
+.gtCheck { width: 26px; height: 26px; border-radius: 8px; border: 1.5px solid var(--brand-300); background: var(--surface); color: transparent; cursor: pointer; font-weight: 800; }
+.gtCheck:hover { color: #16A34A; border-color: #16A34A; }
+.gtCheck.on { background: #16A34A; border-color: #16A34A; color: #fff; }
+.gtActions { display: flex; gap: 4px; align-items: center; }
+.gtSnooze { width: auto; padding: 4px 6px; font-size: 12px; }
+.gtEdit { display: grid; grid-template-columns: 1fr 150px auto auto; gap: 6px; }
+.modBtns { display: flex; gap: 4px; align-items: center; }
+@media (max-width: 700px) { .gtList li { grid-template-columns: auto 1fr; } .gtActions, .gtList li .badge { grid-column: 2; justify-self: start; } .gtEdit { grid-template-columns: 1fr; } }
+
+/* ---------- AI schedule / assignment ---------- */
+.aiSched { margin-top: 12px; border: 1px solid rgba(91,33,182,.2); border-radius: 14px; padding: 12px; display: grid; gap: 8px; background: linear-gradient(135deg, rgba(61,9,109,.05), rgba(22,163,74,.04)); }
+.aiSchedRow { display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: stretch; }
+.aiSchedCard { border: 1px solid var(--border); border-radius: 12px; padding: 10px; background: var(--surface); display: grid; gap: 8px; }
+.aiSchedGrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 8px; }
+.aiSchedGrid > div { display: grid; gap: 1px; }
+.aiSchedGrid span { font-size: 11px; text-transform: uppercase; letter-spacing: .5px; color: var(--muted); font-weight: 700; }
+.aiAuto { display: grid; gap: 5px; }
+.aiAutoItem { display: grid; grid-template-columns: 1fr auto auto auto; gap: 8px; align-items: center; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 6px 10px; }
+.assignAI { border: 1px dashed var(--brand-300); border-radius: 12px; padding: 10px; background: var(--brand-50); display: grid; gap: 4px; margin-top: 8px; }
+@media (max-width: 700px) { .aiSchedRow, .aiAutoItem { grid-template-columns: 1fr; } }
+
+/* ---------- Target planner ---------- */
+.targetPlanner { margin-bottom: 14px; }
+.tpProgress { display: grid; gap: 8px; margin: 10px 0; }
+.tpBar { height: 10px; background: var(--brand-50); border-radius: 999px; overflow: hidden; }
+.tpBar > div { height: 100%; background: linear-gradient(90deg, #3D096D, #16A34A); }
+.tpBar > div.late { background: linear-gradient(90deg, #D97706, #DC2626); }
+.tpInput { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 8px; }
+.tpInput label { margin: 0; }
+.tpInput input { max-width: 200px; }
+.tpExtra { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; margin-top: 8px; }
+.tpReasons { margin: 8px 0 0; padding-left: 18px; display: grid; gap: 2px; }

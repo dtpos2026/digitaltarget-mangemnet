@@ -5,6 +5,7 @@ import { uid, todayISO, fmtMoney } from "@/lib/db";
 import { saveElementAsImage } from "@/lib/exportUtils";
 import ModuleInsights from "@/components/ModuleInsights";
 import { activeOnly } from "@/lib/closing";
+import { suggestAssignee } from "@/lib/assignAI";
 
 const STATUS_OPTIONS = ["Assigned", "In Progress", "Submitted", "Revision", "Completed", "Cancelled"];
 
@@ -29,6 +30,9 @@ export default function AssignmentsTab() {
   const [previewAssignment, setPreviewAssignment] = useState<any | null>(null);
 
   const categories = ["Video Editing", "Graphic Design", "Content Writing", "Reels Editing", "Photo Editing", "Animation", "Other"];
+
+  // AI: who should do this task (role, workload, deadline, this month's money).
+  const aiPick = (title.trim() || category) ? suggestAssignee(data, { title, category, deadline, cost: +rate || 0 }) : null;
 
   const handleAdd = async () => {
     if (!memberId) { alert("Member select karein"); return; }
@@ -105,6 +109,15 @@ export default function AssignmentsTab() {
           <div><label>Task Title</label><input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. 10 Reels Edit for Brand X" /></div>
           <div><label>Rate / Amount (Rs)</label><input type="number" value={rate} onChange={(e) => setRate(e.target.value)} placeholder="0" /></div>
         </div>
+        {aiPick && (
+          <div className="assignAI">
+            <div className="lpHead">✨ AI suggestion</div>
+            <div><b>{aiPick.who === "self" ? "Ye kaam aap khud karein" : `${aiPick.memberName} ko dein`}</b></div>
+            <div className="small">{aiPick.reason}</div>
+            {aiPick.alternatives.length > 0 && <div className="small">Doosre options: {aiPick.alternatives.map((x) => `${x.memberName} (${x.reason})`).join(" • ")}</div>}
+            {aiPick.who === "member" && memberId !== aiPick.memberId && <button className="btnSmall" style={{ justifySelf: "start" }} onClick={() => setMemberId(aiPick.memberId)}>Use suggestion</button>}
+          </div>
+        )}
         <div><label>Description / Brief</label><textarea value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Detail likhein: kya banana hai, kis style mein, ratio, music..." /></div>
         <div><label>Drive / Content Link</label><input value={driveLink} onChange={(e) => setDriveLink(e.target.value)} placeholder="https://drive.google.com/... ya YouTube link" /></div>
         <div><label>Terms & Conditions</label><textarea value={terms} onChange={(e) => setTerms(e.target.value)} /></div>

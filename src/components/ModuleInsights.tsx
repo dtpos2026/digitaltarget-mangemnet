@@ -29,8 +29,13 @@ export default function ModuleInsights({ module, limit = 4 }: { module: ModuleKe
   const a = useMemo(() => analyzeModule(module, data), [module, data]);
   if (!(hasFullAccess || can("reports.view"))) return null;
   const canTask = hasFullAccess || can("settings.manage");
-  const shown = all ? a.insights : a.insights.slice(0, limit);
+  // Dismissed suggestions never come back.
+  const visible = a.insights.filter((i) => !tasks.isDismissed(module, i));
+  const shown = all ? visible : visible.slice(0, limit);
   const actionable = a.insights.filter((i) => i.action && !tasks.has(module, i));
+  const dismiss = async (i: (typeof a.insights)[number]) => {
+    try { await tasks.dismissSuggestion(module, i); setMsg("Suggestion hata di — dobara nahi aayegi"); } catch (e) { setMsg("Save nahi hua: " + (e as Error).message); }
+  };
 
   const toggle = () => {
     setOpen(!open);
@@ -48,7 +53,7 @@ export default function ModuleInsights({ module, limit = 4 }: { module: ModuleKe
       <button className="modInsightsHead" onClick={toggle} aria-expanded={open}>
         <Sparkles size={16} />
         <b>AI Growth Analysis</b>
-        <span className="small">{MODULE_LABEL[module]} • {a.insights.length} points</span>
+        <span className="small">{MODULE_LABEL[module]} • {visible.length} points</span>
         <ChevronDown size={16} className={open ? "rot" : ""} />
       </button>
       {open && (
@@ -62,7 +67,7 @@ export default function ModuleInsights({ module, limit = 4 }: { module: ModuleKe
               </div>
             ))}
           </div>
-          {a.insights.length === 0 ? (
+          {visible.length === 0 ? (
             <div className="small">Sab theek chal raha hai — abhi koi khaas masla ya mauqa nazar nahi aaya.</div>
           ) : (
             <ul className="modList">
@@ -77,8 +82,11 @@ export default function ModuleInsights({ module, limit = 4 }: { module: ModuleKe
                       <div className="small">{i.detail}</div>
                       {i.action && <div className="modAction">→ {i.action}</div>}
                     </div>
-                    {i.action && canTask && (
-                      <button className="btnSmall" disabled={added} onClick={() => add([i])}>{added ? "✓ Task" : "＋ Task"}</button>
+                    {canTask && (
+                      <div className="modBtns">
+                        {i.action && <button className="btnSmall" disabled={added} onClick={() => add([i])}>{added ? "✓ Task" : "＋ Task"}</button>}
+                        <button className="iconBtn" onClick={() => dismiss(i)} aria-label="Dismiss suggestion" title="Dismiss — dobara nahi dikhega">✕</button>
+                      </div>
                     )}
                   </li>
                 );
@@ -86,7 +94,7 @@ export default function ModuleInsights({ module, limit = 4 }: { module: ModuleKe
             </ul>
           )}
           <div className="modFoot">
-            {a.insights.length > limit && <button className="linkBtn" onClick={() => setAll(!all)}>{all ? "Kam dikhayein" : `Sab ${a.insights.length} dekhein`}</button>}
+            {visible.length > limit && <button className="linkBtn" onClick={() => setAll(!all)}>{all ? "Kam dikhayein" : `Sab ${visible.length} dekhein`}</button>}
             {canTask && actionable.length > 0 && <button className="btnSmall" onClick={() => add()}>＋ Sab actions ko tasks banayein ({actionable.length})</button>}
             {msg && <span className="small">{msg}</span>}
           </div>

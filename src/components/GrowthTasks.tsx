@@ -4,7 +4,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useData } from "@/contexts/DataContext";
 import { todayISO } from "@/lib/db";
 import { analyzeModule, ModuleKey } from "@/lib/moduleInsights";
-import { MODULE_LABEL, useGrowthTasks } from "@/lib/growthTasks";
+import { MODULE_LABEL, isSnoozed, statusOf, useGrowthTasks } from "@/lib/growthTasks";
 
 const MODULES: ModuleKey[] = ["leads", "whatsapp", "invoices", "clients", "projects", "assignments", "team", "finance"];
 
@@ -15,11 +15,15 @@ export default function GrowthTasks() {
   const g = useGrowthTasks();
   const [showDone, setShowDone] = useState(false);
   const [msg, setMsg] = useState("");
+  const [editing, setEditing] = useState<string | null>(null);
+  const [draft, setDraft] = useState({ title: "", due: "" });
   if (!(hasFullAccess || can("settings.manage"))) return null;
 
   const today = todayISO();
-  const open = g.tasks.filter((t) => !t.done).sort((a, b) => a.due.localeCompare(b.due));
-  const done = g.tasks.filter((t) => t.done);
+  const open = g.tasks.filter((t) => statusOf(t) === "open" && !isSnoozed(t, today)).sort((a, b) => a.due.localeCompare(b.due));
+  const snoozed = g.tasks.filter((t) => statusOf(t) === "open" && isSnoozed(t, today));
+  const done = g.tasks.filter((t) => statusOf(t) === "done");
+  const dismissed = g.tasks.filter((t) => statusOf(t) === "dismissed").length;
   const weekAgo = new Date(Date.now() - 7 * 864e5).toISOString();
   const doneWeek = done.filter((t) => (t.doneAt || "") >= weekAgo).length;
   const progress = open.length + doneWeek ? Math.round((doneWeek / (open.length + doneWeek)) * 100) : 0;
@@ -55,16 +59,37 @@ export default function GrowthTasks() {
         <ul className="gtList">
           {open.map((t) => (
             <li key={t.id} className={`sev-${t.severity}${t.due < today ? " late" : ""}`}>
-              <input type="checkbox" checked={false} onChange={() => g.toggle(t.id)} aria-label="Mukammal" />
-              <div>
-                <b>{t.title}</b>
-                <div className="small">{MODULE_LABEL[t.module]} • {t.detail}</div>
-              </div>
+              <button className="gtCheck" onClick={() => g.complete(t.id)} aria-label="Complete" title="Complete ✓">✓</button>
+              {editing === t.id ? (
+                <div className="gtEdit">
+                  <input value={draft.title} onChange={(e) => setDraft({ ...draft, title: e.target.value })} aria-label="Task" />
+                  <input type="date" value={draft.due} onChange={(e) => setDraft({ ...draft, due: e.target.value })} aria-label="Due date" />
+                  <button className="btnSmall" onClick={() => { g.edit(t.id, { title: draft.title.trim() || t.title, due: draft.due || t.due }); setEditing(null); }}>Save</button>
+                  <button className="btnSmall" onClick={() => setEditing(null)}>Cancel</button>
+                </div>
+              ) : (
+                <div>
+                  <b>{t.title}</b>
+                  <div className="small">{MODULE_LABEL[t.module] || t.module} • {t.detail}{t.edited ? " • edited" : ""}</div>
+                </div>
+              )}
               <span className={`badge ${t.due < today ? "bad" : t.due === today ? "warn" : ""}`}>{t.due < today ? "Late " : ""}{t.due}</span>
-              <button className="btnSmall" onClick={() => g.remove(t.id)} aria-label="Delete task">✕</button>
+              <div className="gtActions">
+                <button className="btnSmall" onClick={() => { setEditing(t.id); setDraft({ title: t.title, due: t.due }); }} title="Edit">✎</button>
+                <select className="gtSnooze" value="" onChange={(e) => e.target.value && g.snooze(t.id, Number(e.target.value))} aria-label="Snooze" title="Snooze">
+                  <option value="">⏰</option><option value="1">1 din</option><option value="3">3 din</option><option value="7">1 hafta</option>
+                </select>
+                <button className="btnSmall" onClick={() => g.dismiss(t.id)} aria-label="Dismiss" title="Dismiss — dobara nahi aayega">✕</button>
+              </div>
             </li>
           ))}
         </ul>
+      )}
+      {(snoozed.length > 0 || dismissed > 0) && (
+        <div className="small" style={{ marginTop: 6 }}>
+          {snoozed.length > 0 && <>⏰ {snoozed.length} snoozed ({snoozed.map((t) => t.snoozeUntil).sort()[0]} tak) </>}
+          {dismissed > 0 && <>• ✕ {dismissed} dismissed (AI dobara nahi dikhayega)</>}
+        </div>
       )}
       {done.length > 0 && (
         <div className="gtDone">
@@ -74,7 +99,7 @@ export default function GrowthTasks() {
               <ul className="gtList done">
                 {done.slice(-20).reverse().map((t) => (
                   <li key={t.id}>
-                    <input type="checkbox" checked onChange={() => g.toggle(t.id)} aria-label="Wapas kholein" />
+                    <button className="gtCheck on" onClick={() => g.reopen(t.id)} aria-label="Wapas kholein" title="Wapas kholein">✓</button>
                     <div><s>{t.title}</s></div>
                   </li>
                 ))}

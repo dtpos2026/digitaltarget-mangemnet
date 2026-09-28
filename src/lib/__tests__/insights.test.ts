@@ -57,3 +57,27 @@ describe("analyzeBusiness", () => {
     expect(a.score).toBeGreaterThan(0);
   });
 });
+
+describe("business questions", () => {
+  const today = new Date("2026-09-28T12:00:00");
+  const base = {
+    accounting: [
+      { type: "IN", category: "Invoice Paid", amount: 100000, date: "2026-09-05" },
+      { type: "OUT", category: "Team Salary", amount: 60000, date: "2026-09-01" },
+      { type: "OUT", category: "Ads Run", amount: 20000, date: "2026-09-10" },
+    ],
+    invoices: [
+      { id: "I1", clientId: "C1", dateISO: "2026-09-02", category: "Retail POS", grandTotal: 100000, paidAmount: 100000, items: [] },
+      { id: "I2", clientId: "C1", dateISO: "2026-08-20", category: "Advertisement Packages", grandTotal: 15000, paidAmount: 15000, endDate: "2026-10-02", items: [] },
+    ],
+    leads: [1, 2, 3, 4].map((i) => ({ id: "L" + i, date: "2026-09-10", serviceType: "Video Editing", status: "Contacted", source: "Facebook Ads" })),
+    clients: [{ id: "C1", name: "Abdullah Medicare" }], team: [], wallets: [], budgets: [],
+  };
+  it("answers: weak service, renewal near, cost per lead, outsource", () => {
+    const ids = analyzeBusiness(base, today).insights.map((i) => i.id);
+    expect(ids).toContain("weak-line");
+    expect(ids).toContain("renewals");
+    expect(ids).toContain("cpl");
+    expect(ids).toContain("outsource");
+  });
+});

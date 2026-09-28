@@ -1,11 +1,29 @@
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import { useData } from "@/contexts/DataContext";
 import { uid, todayISO, fmtMoney } from "@/lib/db";
 import { writeSafeDocument } from "@/lib/safeHtml";
 import { activeOnly } from "@/lib/closing";
+import { parseScheduleText, ScheduleSuggestion, ScheduleType } from "@/lib/scheduleAI";
+import { useGrowthTasks } from "@/lib/growthTasks";
+import { useAuth } from "@/contexts/AuthContext";
+import { invoiceView, renewalState } from "@/lib/invoice";
+
+// AI types → the schedule's categories.
+const TYPE_TO_CATEGORY: Record<ScheduleType, string> = {
+  "Follow-up": "Follow-up", Meeting: "Meeting", Call: "Call / Reminder", "Payment Reminder": "Payment Collection",
+  Renewal: "Renewal", "Project Deadline": "Project Deadline", "Pending Work": "Pending Work", "Client Response": "Client Response",
+};
 
 export default function ScheduleTab() {
   const { data, addItem, removeItem, updateItem } = useData();
+  const { can, user } = useAuth();
+  const g = useGrowthTasks();
+  const [aiText, setAiText] = useState("");
+  const [sugg, setSugg] = useState<ScheduleSuggestion | null>(null);
+  const [editId, setEditId] = useState<string | null>(null);
+  const [showHidden, setShowHidden] = useState(false);
+  const [reschedId, setReschedId] = useState<string | null>(null);
+  const [reschedDate, setReschedDate] = useState("");
   const [date, setDate] = useState(todayISO());
   const [category, setCategory] = useState("Meeting");
   const [status, setStatus] = useState("Pending");
@@ -19,18 +37,89 @@ export default function ScheduleTab() {
   const [location, setLocation] = useState("");
   const [notes, setNotes] = useState("");
 
-  const categories = ["Meeting", "Payment Collection", "Project Follow-up", "Call / Reminder", "Delivery / Visit", "Personal Task", "Other"];
+  const categories = ["Meeting", "Follow-up", "Payment Collection", "Renewal", "Project Follow-up", "Project Deadline", "Pending Work", "Client Response", "Call / Reminder", "Delivery / Visit", "Personal Task", "Other"];
 
   const handleAdd = async () => {
     if (!task.trim()) { alert("Task required"); return; }
-    await addItem("schedule", {
-      id: uid("S"), date, category, clientId, projectId, task: task.trim(),
+    const fields = {
+      date, category, clientId, projectId, task: task.trim(),
       status, priority, payFollow: payFollow.trim(), assignedTo: assignedTo.trim(),
       time, location: location.trim(), notes: notes.trim(),
-    });
+    };
+    if (editId) {
+      const old = data.schedule.find((x: any) => x.id === editId);
+      if (old) await updateItem("schedule", { ...old, ...fields, updatedAt: new Date().toISOString() });
+      setEditId(null);
+    } else {
+      await addItem("schedule", { id: uid("S"), ...fields, createdAt: new Date().toISOString(), createdBy: user?.email || "" });
+    }
     setTask(""); setPayFollow(""); setAssignedTo(""); setTime(""); setLocation(""); setNotes("");
     setPriority("Medium"); setStatus("Pending"); setCategory("Meeting");
   };
+
+  // ---------- AI assistant ----------
+  const suggest = () => {
+    if (!aiText.trim()) return;
+    setSugg(parseScheduleText(aiText, { clients: data.clients, leads: data.leads }));
+  };
+  const acceptSugg = async (sg: ScheduleSuggestion) => {
+    await addItem("schedule", {
+      id: uid("S"), date: sg.date, time: sg.time, category: TYPE_TO_CATEGORY[sg.type], clientId: sg.clientId, leadId: sg.leadId,
+      projectId: "", task: sg.task, status: "Pending", priority: sg.priority, notes: sg.notes, reminderAt: sg.reminder,
+      payFollow: "", assignedTo: "", location: "", source: "ai", createdAt: new Date().toISOString(), createdBy: user?.email || "",
+    });
+    setSugg(null); setAiText("");
+  };
+  const editSugg = (sg: ScheduleSuggestion) => {
+    setEditId(null);
+    setDate(sg.date); setTime(sg.time); setCategory(TYPE_TO_CATEGORY[sg.type]); setClientId(sg.clientId);
+    setTask(sg.task); setPriority(sg.priority); setNotes(sg.notes); setStatus("Pending");
+    setSugg(null);
+    window.scrollTo({ top: document.querySelector(".schedForm")?.getBoundingClientRect().top ?? 0, behavior: "smooth" });
+  };
+  const editItem = (s: any) => {
+    setEditId(s.id); setDate(s.date || todayISO()); setTime(s.time || ""); setCategory(s.category || "Other"); setClientId(s.clientId || "");
+    setProjectId(s.projectId || ""); setTask(s.task || ""); setPriority(s.priority || "Medium"); setStatus(s.status || "Pending");
+    setPayFollow(s.payFollow || ""); setAssignedTo(s.assignedTo || ""); setLocation(s.location || ""); setNotes(s.notes || "");
+  };
+  const setItemStatus = (s: any, next: string) => updateItem("schedule", { ...s, status: next, updatedAt: new Date().toISOString(), ...(next === "Done" ? { doneAt: new Date().toISOString() } : {}) });
+  const reschedule = async (s: any) => {
+    if (!reschedDate) return;
+    await updateItem("schedule", { ...s, date: reschedDate, status: s.status === "Done" ? "Pending" : s.status, rescheduledFrom: s.date, updatedAt: new Date().toISOString() });
+    setReschedId(null); setReschedDate("");
+  };
+
+  // Suggestions from the data: follow-ups due, renewals, overdue payments (not yet scheduled).
+  const autoSuggestions = useMemo(() => {
+    const today = todayISO();
+    const scheduledFor = new Set(activeOnly(data.schedule).map((x: any) => x.leadId || x.invoiceId || "").filter(Boolean));
+    const out: { key: string; title: string; detail: string; sg: ScheduleSuggestion }[] = [];
+    const mk = (over: Partial<ScheduleSuggestion>): ScheduleSuggestion => ({ clientId: "", clientName: "", leadId: "", task: "", date: today, time: "", priority: "Medium", type: "Follow-up", notes: "", reminder: new Date(`${today}T10:00:00`).toISOString(), found: [], ...over });
+    for (const l of data.leads) {
+      if (!l.followUpDate || l.followUpDate > today || ["Converted", "Lost", "Invalid"].includes(l.status) || l.optOut || scheduledFor.has(l.id)) continue;
+      out.push({ key: `sched:lead:${l.id}`, title: `Follow-up: ${l.name}`, detail: `${l.serviceType || "Lead"} • follow-up ${l.followUpDate}`, sg: mk({ leadId: l.id, task: `Follow-up — ${l.name}${l.serviceType ? ` (${l.serviceType})` : ""}`, priority: l.followUpDate < today ? "High" : "Medium", notes: l.ai?.nextAction || "" }) });
+    }
+    for (const inv of data.invoices) {
+      if (scheduledFor.has(inv.id)) continue;
+      const v = invoiceView(inv);
+      const client = data.clients.find((c: any) => c.id === inv.clientId);
+      if (v.status === "Overdue") out.push({ key: `sched:pay:${inv.id}`, title: `Payment: ${client?.name || v.number}`, detail: `Rs ${fmtMoney(v.due)} overdue (${inv.dueDate})`, sg: mk({ clientId: inv.clientId || "", type: "Payment Reminder", priority: "High", task: `Payment Reminder — ${client?.name || ""}: ${v.number} Rs ${fmtMoney(v.due)}` }) });
+      const rs = renewalState(inv, Number(data.settings?.renewalReminderDays) || 7);
+      if ((rs === "due_soon" || rs === "expired") && !data.invoices.some((x: any) => x.renewalOf === inv.id)) out.push({ key: `sched:renew:${inv.id}`, title: `Renewal: ${client?.name || v.number}`, detail: `${inv.packageName || inv.category || ""} ends ${inv.endDate}`, sg: mk({ clientId: inv.clientId || "", type: "Renewal", priority: "High", task: `Renewal — ${client?.name || ""}: ${inv.packageName || inv.category || v.number}` }) });
+    }
+    return out.filter((x) => !g.has("dashboard", { id: x.key })).slice(0, 12);
+  }, [data.leads, data.invoices, data.clients, data.schedule, data.settings, g]);
+  const acceptAuto = async (x: (typeof autoSuggestions)[number]) => {
+    const id = uid("S");
+    await addItem("schedule", {
+      id, date: x.sg.date, time: "", category: TYPE_TO_CATEGORY[x.sg.type], clientId: x.sg.clientId, leadId: x.sg.leadId,
+      invoiceId: x.key.startsWith("sched:pay:") || x.key.startsWith("sched:renew:") ? x.key.split(":")[2] : "",
+      projectId: "", task: x.sg.task, status: "Pending", priority: x.sg.priority, notes: x.sg.notes, reminderAt: x.sg.reminder,
+      payFollow: "", assignedTo: "", location: "", source: "ai", createdAt: new Date().toISOString(), createdBy: user?.email || "",
+    });
+  };
+  const dismissAuto = (x: (typeof autoSuggestions)[number]) =>
+    g.dismissSuggestion("dashboard", { id: x.key, severity: "info", title: x.title, detail: x.detail, action: x.sg.task });
 
   const toggleStatus = async (s: any) => {
     const order = ["Pending", "In Progress", "Done", "Cancel"];
@@ -178,6 +267,48 @@ export default function ScheduleTab() {
       <h2>Schedule / Daily Work</h2>
       <div className="small">Meeting, payment collection, project follow-up, calls, reminders aur daily field work ko alag categories mein manage karein. Thermal printer ke liye 58mm aur 80mm PNG/JPG export bhi available hai.</div>
 
+      {can("schedule.manage") && (
+        <div className="aiSched">
+          <div className="lpHead">✨ AI schedule assistant</div>
+          <div className="aiSchedRow">
+            <textarea rows={2} value={aiText} onChange={(e) => setAiText(e.target.value)} placeholder='Jaise: "Abdullah Medicare se kal follow-up karna hai, package renewal discuss karna hai" ya "Cafe Aroma ko parson 3 baje demo"' onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); suggest(); } }} />
+            <button className="btnSolid" onClick={suggest}>Suggest</button>
+          </div>
+          {sugg && (
+            <div className="aiSchedCard">
+              <div className="aiSchedGrid">
+                <div><span>Task</span><b>{sugg.task}</b></div>
+                <div><span>Client / lead</span><b>{sugg.clientName || "—"}</b></div>
+                <div><span>Date</span><b>{sugg.date}{sugg.time ? ` • ${sugg.time}` : ""}</b></div>
+                <div><span>Type</span><b>{sugg.type}</b></div>
+                <div><span>Priority</span><b className={sugg.priority === "High" ? "warnText" : ""}>{sugg.priority}</b></div>
+                <div><span>Reminder</span><b>{new Date(sugg.reminder).toLocaleString("en-PK", { dateStyle: "medium", timeStyle: "short" })}</b></div>
+              </div>
+              <div className="small">Pehchana: {sugg.found.join(" • ")}</div>
+              <div className="rowActions">
+                <button className="btnSolid" onClick={() => acceptSugg(sugg)}>✓ Accept</button>
+                <button className="btnSmall" onClick={() => editSugg(sugg)}>✎ Edit</button>
+                <button className="btnSmall" onClick={() => setSugg(null)}>✕ Dismiss</button>
+              </div>
+            </div>
+          )}
+          {autoSuggestions.length > 0 && (
+            <div className="aiAuto">
+              <div className="small"><b>AI ne ye kaam schedule karne ka mashwara diya</b> (follow-ups, renewals, overdue payments)</div>
+              {autoSuggestions.map((x) => (
+                <div key={x.key} className="aiAutoItem">
+                  <div><b>{x.title}</b><div className="small">{x.detail}</div></div>
+                  <span className={`badge ${x.sg.priority === "High" ? "bad" : "warn"}`}>{x.sg.priority}</span>
+                  <button className="btnSmall" onClick={() => acceptAuto(x)}>✓ Schedule</button>
+                  <button className="iconBtn" onClick={() => dismissAuto(x)} title="Dismiss — dobara nahi dikhega" aria-label="Dismiss">✕</button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      <div className="schedForm">{editId && <div className="badge warn" style={{ marginTop: 10 }}>Editing — save par update hoga</div>}</div>
       <div className="grid3" style={{ marginTop: 12 }}>
         <div><label>Date</label><input type="date" value={date} onChange={(e) => setDate(e.target.value)} /></div>
         <div><label>Category</label>
@@ -224,7 +355,8 @@ export default function ScheduleTab() {
         <textarea value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="meeting reason, payment details, follow-up message, next action"></textarea>
       </div>
       <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center", marginTop: 12 }}>
-        <button className="btnSolid" onClick={handleAdd}>Save Schedule Item</button>
+        <button className="btnSolid" onClick={handleAdd}>{editId ? "Update Schedule Item" : "Save Schedule Item"}</button>
+        {editId && <button className="btnSmall" onClick={() => { setEditId(null); setTask(""); setNotes(""); }}>Cancel edit</button>}
         <button className="btnSmall" onClick={printDailySchedule}>📄 Daily Sheet (Branded)</button>
         <button className="btnSmall" onClick={printAllHistory}>📚 Full History</button>
         <button className="btnSmall" onClick={printRange}>📅 Date Range</button>
@@ -233,11 +365,19 @@ export default function ScheduleTab() {
       </div>
 
       <hr />
+      <label className="permItem" style={{ margin: "0 0 6px" }}>
+        <input type="checkbox" checked={showHidden} onChange={(e) => setShowHidden(e.target.checked)} />
+        <span className="small">Dismissed / cancelled bhi dikhayein</span>
+      </label>
       <div className="tablewrap">
         <table>
           <thead><tr><th>Date</th><th>Category</th><th>Client / Project</th><th>Task</th><th>Priority</th><th>Status</th><th>Payment</th><th>Assigned</th><th>Action</th></tr></thead>
           <tbody>
-            {activeOnly(data.schedule).slice().reverse().map((s) => {
+            {activeOnly(data.schedule)
+              .filter((s: any) => showHidden || !["Dismissed", "Cancel"].includes(s.status))
+              .slice()
+              .sort((a: any, b: any) => (a.status === "Done" ? 1 : 0) - (b.status === "Done" ? 1 : 0) || String(a.date || "").localeCompare(String(b.date || "")) || String(a.time || "").localeCompare(String(b.time || "")))
+              .map((s: any) => {
               const c = data.clients.find(x => x.id === s.clientId);
               const p = data.projects.find(x => x.id === s.projectId);
               return (
@@ -245,13 +385,22 @@ export default function ScheduleTab() {
                   <td>{s.date || ""}<div className="small">{s.time || ""}</div></td>
                   <td>{s.category || "Other"}</td>
                   <td>{c?.name || ""}<div className="small">{p?.title || s.location || ""}</div></td>
-                  <td>{s.task || ""}<div className="small">{s.notes || ""}</div></td>
+                  <td>{s.source === "ai" && <span className="badge pri" title="AI se bana">✨ AI</span>} {s.task || ""}<div className="small">{s.notes || ""}</div>{s.rescheduledFrom && <div className="small">↻ {s.rescheduledFrom} se</div>}</td>
                   <td><span className={`badge ${s.priority === "High" ? "bad" : (s.priority === "Low" ? "ok" : "warn")}`}>{s.priority || "Medium"}</span></td>
                   <td><span className={`badge ${getStatusBadge(s.status)}`}>{s.status}</span></td>
                   <td>{s.payFollow || ""}</td>
                   <td>{s.assignedTo || "—"}</td>
                   <td className="rowActions">
-                    <button className="btnSmall" onClick={() => toggleStatus(s)}>Status</button>
+                    {s.status !== "Done" && <button className="btnSmall" onClick={() => setItemStatus(s, "Done")} title="Complete">✓ Done</button>}
+                    {reschedId === s.id ? (
+                      <>
+                        <input type="date" value={reschedDate} onChange={(e) => setReschedDate(e.target.value)} aria-label="New date" style={{ width: 140 }} />
+                        <button className="btnSmall" onClick={() => reschedule(s)}>OK</button>
+                      </>
+                    ) : <button className="btnSmall" onClick={() => { setReschedId(s.id); setReschedDate(s.date || todayISO()); }}>↻ Reschedule</button>}
+                    <button className="btnSmall" onClick={() => editItem(s)}>✎</button>
+                    <button className="btnSmall" onClick={() => toggleStatus(s)} title="Status badlein">Status</button>
+                    {s.status !== "Dismissed" && <button className="btnSmall" onClick={() => setItemStatus(s, "Dismissed")} title="Dismiss">✕</button>}
                     <button className="btnSmall" onClick={() => { if (confirm("Delete?")) removeItem("schedule", s.id); }}>Delete</button>
                   </td>
                 </tr>

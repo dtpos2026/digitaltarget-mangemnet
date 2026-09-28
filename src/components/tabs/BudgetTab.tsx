@@ -3,6 +3,7 @@ import { useData } from "@/contexts/DataContext";
 import { fmtMoney } from "@/lib/db";
 import { saveReportImage, printElementHTML } from "@/lib/exportUtils";
 import GrowthAnalysis from "@/components/GrowthAnalysis";
+import TargetPlanner from "@/components/TargetPlanner";
 import { expenseCategoriesOf, inRange, isExpense, summarize } from "@/lib/finance";
 
 export default function BudgetTab() {
@@ -152,7 +153,8 @@ export default function BudgetTab() {
 
   return (
     <>
-    <GrowthAnalysis />
+    <TargetPlanner />
+      <GrowthAnalysis />
     <section className="card" ref={sectionRef}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
         <div>
