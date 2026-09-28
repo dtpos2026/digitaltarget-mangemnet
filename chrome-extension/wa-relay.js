@@ -41,6 +41,23 @@
   // Re-announce: the extension's worker may have restarted and forgotten us.
   setInterval(hello, 60000);
 
+  // ---------- Embedded in the portal: WhatsApp refuses ----------
+  // WhatsApp Web often shows "Sorry, something went wrong … Go Back" when it
+  // is loaded inside another site. Tell the portal so it can switch to the
+  // separate window instead of leaving a dead frame.
+  if (!top) {
+    let told = false;
+    const check = () => {
+      if (told || !document.body) return;
+      const t = (document.body.innerText || "").slice(0, 600);
+      if (/something went wrong/i.test(t) && /(go back|working on getting this fixed)/i.test(t) && !document.querySelector("#pane-side")) {
+        told = true;
+        chrome.runtime.sendMessage({ kind: "agent-event", event: "frameError", data: { text: t.slice(0, 120) } }).catch(() => {});
+      }
+    };
+    setInterval(check, 2500);
+  }
+
   // ---------- Standalone-window panel ----------
   let panel, statusEl, chatEl, noteEl;
   const mark = '<svg width="18" height="18" viewBox="0 0 2 2"><g fill="#fff"><polygon points="0,0 1,0 1,1"/><polygon points="1,0 2,0 2,1"/><polygon points="0,1 1,1 1,2"/><polygon points="1,1 2,1 2,2"/></g></svg>';

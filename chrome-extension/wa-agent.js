@@ -70,12 +70,28 @@
     const c = chat.contact || {};
     return c.name || chat.formattedTitle || c.pushname || c.verifiedName || c.formattedName || "";
   };
+  // WhatsApp Business labels ("Hot lead", "Client", …) → names. Best effort:
+  // regular WhatsApp has no labels, and the shape differs between versions.
+  let labelMap = null;
+  async function labelNamesOf(chat) {
+    try {
+      const ids = chat.labels || (chat.attributes && chat.attributes.labels) || [];
+      if (!ids || !ids.length) return [];
+      if (!labelMap && W().labels && W().labels.getAllLabels) {
+        labelMap = {};
+        for (const l of (await W().labels.getAllLabels()) || []) labelMap[String(l.id)] = String(l.name || "");
+        setTimeout(() => { labelMap = null; }, 60000);
+      }
+      return Array.from(ids).map((id) => (labelMap && labelMap[String(id && id.id != null ? id.id : id)]) || "").filter(Boolean);
+    } catch { return []; }
+  }
   async function chatInfo(chat) {
     const c = chat.contact || {};
     return {
       id: ser(chat.id), name: nameOf(chat), pushname: c.pushname || "", phone: await phoneOf(chat),
       saved: !!(c.isMyContact || c.name), isGroup: !!chat.isGroup || (chat.id && chat.id.server === "g.us"),
       t: Number(chat.t || 0) * 1000, unread: Number(chat.unreadCount || 0), archived: !!chat.archive,
+      isBusiness: !!(c.isBusiness || c.isEnterprise), labels: await labelNamesOf(chat),
     };
   }
   function msgInfo(m) {
@@ -89,7 +105,9 @@
     else text = `[${type}]`;
     const remote = ser((key && key.remote) || m.from || "");
     // ack: 1 sent to server, 2 delivered, 3 read (WhatsApp's own receipt).
-    return { id: ser(key), fromMe, type, t: Number(m.t || 0) * 1000, text: String(text).slice(0, 4000), remote, ack: Number(m.ack || 0) };
+    // Click-to-WhatsApp (Facebook / Instagram ad) messages carry ad metadata.
+    const ad = !!(m.ctwaContext || m.ctwaAdReferral || m.adContext || (m.contextInfo && m.contextInfo.externalAdReply) || m.isAdMessage);
+    return { id: ser(key), fromMe, type, t: Number(m.t || 0) * 1000, text: String(text).slice(0, 4000), remote, ack: Number(m.ack || 0), ad };
   }
 
   const wpp = {

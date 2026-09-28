@@ -11,6 +11,8 @@ import { LEAD_TYPE_LABEL, LeadType, analyzeLead, applyAnalysis, levelClass, with
 import LeadProfile from "@/components/LeadProfile";
 import { useAuth } from "@/contexts/AuthContext";
 import ModuleInsights from "@/components/ModuleInsights";
+import { downloadXlsx } from "@/lib/xlsx";
+import { leadsSheets } from "@/lib/leadExport";
 
 export default function LeadsTab() {
   const { data, addItem, removeItem, updateItem } = useData();
@@ -183,18 +185,22 @@ export default function LeadsTab() {
 
   const sectionRef = useRef<HTMLDivElement>(null);
 
+  // Exports use the selected leads when some are ticked, otherwise the current filter.
+  const exportList = selectedLeads.length ? selectedLeads : filtered;
+  const lvl = (l: any) => (l.ai?.level === "Hot" ? "High" : l.ai?.level === "Warm" ? "Medium" : l.ai?.level === "Cold" ? "Low" : "—");
   const buildLeadsHTML = () => {
     let rows = "";
-    filtered.slice().reverse().forEach(l => {
+    exportList.slice().reverse().forEach(l => {
       rows += `<tr>
         <td><b>${l.name}</b></td>
         <td>${l.phone||""}<div style="font-size:10px;color:#666">WA: ${l.whatsapp||l.phone||""}</div></td>
         <td>${l.category||""}</td>
         <td>${l.serviceType||l.software||""}</td>
         <td>${l.status}</td>
+        <td>${lvl(l)}${typeof l.ai?.interest === "number" ? `<div style="font-size:10px;color:#666">${l.ai.interest}%</div>` : ""}</td>
         <td>${l.source||""}${l.referralBy ? `<div style="font-size:10px;color:#666">By: ${l.referralBy}</div>` : ""}</td>
         <td>${l.meetingDate||"—"}</td>
-        <td>${l.followUpDate||"—"}</td>
+        <td>${l.followUpDate||"—"}${l.ai?.nextAction ? `<div style="font-size:10px;color:#666">${l.ai.nextAction}</div>` : ""}</td>
         <td>${l.date||""}</td>
       </tr>`;
     });
@@ -206,11 +212,12 @@ export default function LeadsTab() {
           <div class="card" style="flex:1;text-align:center"><div style="font-size:11px;color:#888">Converted</div><div style="font-size:22px;font-weight:900">${converted}</div></div>
           <div class="card" style="flex:1;text-align:center"><div style="font-size:11px;color:#888">Meetings Today</div><div style="font-size:22px;font-weight:900">${meetingsToday}</div></div>
         </div>
-        <table><thead><tr><th>Name</th><th>Phone</th><th>Category</th><th>Service</th><th>Status</th><th>Source</th><th>Meeting</th><th>Follow-up</th><th>Added</th></tr></thead><tbody>${rows}</tbody></table>
+        <table><thead><tr><th>Name</th><th>Phone</th><th>Category</th><th>Service</th><th>Status</th><th>Interest</th><th>Source</th><th>Meeting</th><th>Follow-up / Next action</th><th>Added</th></tr></thead><tbody>${rows}</tbody></table>
       </div>`;
     return html;
   };
-  const leadsReport = { title: "Leads Report", subtitle: `${filtered.length} leads`, landscape: true, filename: `Leads_Report_${todayISO()}` };
+  const leadsReport = { title: "Leads Report", subtitle: `${exportList.length} leads${selectedLeads.length ? " (selected)" : ""}`, landscape: true, filename: `Leads_Report_${todayISO()}` };
+  const exportLeadsExcel = () => downloadXlsx(`Leads_${todayISO()}`, leadsSheets(exportList));
   const exportLeadsPDF = () => printElementHTML(buildLeadsHTML(), leadsReport);
 
   const exportLeadsImage = (fmt: "png"|"jpg") => {
@@ -227,7 +234,8 @@ export default function LeadsTab() {
           <div className="small">Marketing leads, meetings, follow-ups aur referrals manage karein.</div>
         </div>
         <div style={{ display: "flex", gap: 6 }}>
-          <button className="btnSmall" onClick={exportLeadsPDF}>PDF</button>
+          <button className="btnSmall" onClick={exportLeadsExcel} title="Excel file (.xlsx) — selected leads, warna current filter">Excel</button>
+          <button className="btnSmall" onClick={exportLeadsPDF} title="Branded PDF — selected leads, warna current filter">PDF</button>
           <button className="btnSmall" onClick={() => exportLeadsImage("png")}>PNG</button>
           <button className="btnSmall" onClick={() => exportLeadsImage("jpg")}>JPG</button>
         </div>

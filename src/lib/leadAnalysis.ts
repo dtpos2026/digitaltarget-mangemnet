@@ -66,13 +66,37 @@ export function conversationOf(lead: { chat?: ChatLine[]; notes?: string; name?:
     });
 }
 
+const LEVEL_RANK: Record<InterestLevel, number> = { Hot: 3, Warm: 2, Cold: 1 };
+
+/** WhatsApp Business label names → an interest level the owner set by hand. */
+export function labelLevel(labels: string[] = []): InterestLevel | null {
+  let best: InterestLevel | null = null;
+  for (const raw of labels) {
+    const l = raw.toLowerCase();
+    let lv: InterestLevel | null = null;
+    if (/\b(hot|high|urgent|serious|ready|confirmed?|interested|new order)\b/.test(l)) lv = "Hot";
+    else if (/\b(warm|medium|mid|follow|pending|quote|proposal)\b/.test(l)) lv = "Warm";
+    else if (/\b(cold|low|not interested|later|no reply)\b/.test(l)) lv = "Cold";
+    if (lv && (!best || LEVEL_RANK[lv] > LEVEL_RANK[best])) best = lv;
+  }
+  return best;
+}
+
 const ADS_SOURCE = /\b(ads?|facebook|fb|instagram|insta|meta|tiktok|google|campaign|sponsored|boost)\b/i;
-const ADS_CHAT = /\b(ad dekha|ad dekhi|aap ka ad|your ad|saw (your|the) ad|ad se|ads? par|sponsored|click to whatsapp)\b/i;
+// What a customer typically writes after tapping a Facebook / Instagram
+// "Click to WhatsApp" ad (English + Roman Urdu), including the prefilled
+// messages Meta suggests.
+const ADS_CHAT = /\b(ad dekha|ad dekhi|add dekha|aap ka ad|apka ad|your ad|saw (your|the|an?) ad|ad se|ads? par|sponsored|click to whatsapp|(facebook|fb|instagram|insta) (par|pe|per|se|pr|ad|page) (dekha|dekhi|mila|aya|aaya)|(dekha|dekhi) (tha |thi )?(facebook|fb|instagram|insta)|(can|could) i get more info(rmation)? (on|about) this|(i'?m|i am) interested in this|(hi|hello),? ?(i'?d like|i would like|i want) (to know|more)|is (ke|k) (baare|bare) mein (maloomat|info|details)|more information about this)\b/i;
+
+/** True when the chat looks like it came from a Facebook / Instagram ad. */
+export function adsSignal(lines: ChatLine[], meta?: { ad?: boolean }): boolean {
+  if (meta?.ad) return true;
+  return ADS_CHAT.test(lines.filter((l) => !l.fromMe).map((l) => l.text).join(" \n "));
+}
 const looksLikeNumber = (s?: string) => !s || /^\+?[\d\s()-]{7,}$/.test(s.trim());
 
 export function leadTypeOf(lead: { source?: string; name?: string }, lines: ChatLine[]): LeadType {
-  const chat = lines.map((l) => l.text).join(" ");
-  if (ADS_SOURCE.test(String(lead.source || "")) || ADS_CHAT.test(chat)) return "ads";
+  if (ADS_SOURCE.test(String(lead.source || "")) || adsSignal(lines)) return "ads";
   if (looksLikeNumber(lead.name)) return "unsaved";
   if (/whatsapp/i.test(String(lead.source || ""))) return "saved";
   return "other";
@@ -129,7 +153,8 @@ export function analyzeLead(lead: any, settings: unknown, today = new Date()): L
   if (suggestedStatus === "Converted") interest = 100;
   if (optOut || suggestedStatus === "Lost" || suggestedStatus === "Invalid") interest = Math.min(interest, 5);
   interest = Math.max(0, Math.min(100, Math.round(interest)));
-  const level: InterestLevel = interest >= 70 ? "Hot" : interest >= 40 ? "Warm" : "Cold";
+  // A WhatsApp label the owner put on the chat ("Hot lead") wins over the estimate.
+  const level: InterestLevel = labelLevel(lead.waLabels) || (interest >= 70 ? "Hot" : interest >= 40 ? "Warm" : "Cold");
 
   // Potential value: budget said in the chat, else the catalog price for the line.
   const budget = budgetFromChat(lines);

@@ -16,8 +16,10 @@ export interface WaExtChat {
   t: number; // last activity, ms
   unread: number;
   archived: boolean;
+  isBusiness?: boolean;
+  labels?: string[];
 }
-export interface WaExtMessage { id: string; fromMe: boolean; type: string; t: number; text: string; remote?: string; ack?: number }
+export interface WaExtMessage { id: string; fromMe: boolean; type: string; t: number; text: string; remote?: string; ack?: number; ad?: boolean }
 export interface WaExtState {
   ready: boolean;
   authenticated: boolean;

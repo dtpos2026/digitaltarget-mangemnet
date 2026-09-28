@@ -119,7 +119,11 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       reportWriteError("create", col, e);
       throw e;
     }
-    setData((prev) => ({ ...prev, [col]: [...((prev as any)[col] || []), newItem] }));
+    // A live snapshot may already have delivered this document: replace, never add twice.
+    setData((prev) => {
+      const list: any[] = (prev as any)[col] || [];
+      return { ...prev, [col]: list.some((x) => x.id === newItem.id) ? list.map((x) => (x.id === newItem.id ? newItem : x)) : [...list, newItem] };
+    });
     logAudit({ action: "create", collection: col, entityId: newItem.id, entityLabel: entityLabel(newItem) });
   };
 

@@ -8,6 +8,7 @@ const LINE_KEYWORDS: [string, RegExp][] = [
   ["Custom Software", /\b(software|erp|crm|automation|automate|management system|desktop (software|app)|windows software|hybrid software)\b/gi],
   ["Mobile Apps / App Development", /\b(mobile app|android app|ios app|app (banwani|banwana|banani|banana|develop\w*|chahiye)|application (banwani|banani|chahiye)|play ?store|app ?store)\b/gi],
   ["Web Development", /\b(website|web ?site|wordpress|shopify|landing page|domain|hosting|e-?commerce|online store|web app)\b/gi],
+  ["Advertisement Packages", /\b(digital marketing|marketing (package|plan|chahiye|karwani|karwana)|(monthly|ads) package)\b/gi],
   ["Google Ads", /\b(google ads|google par ad|search ads|youtube ads|google ranking ads)\b/gi],
   ["Snapchat Ads", /\b(snap(chat)? ads?)\b/gi],
   ["Meta Ads (Facebook + Instagram)", /\b(facebook ads?|fb ads?|instagram ads?|insta ads?|meta ads?|ads?|advertis\w*|boost\w*|campaigns?|sponsored|leads chahiye)\b/gi],

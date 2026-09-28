@@ -13,6 +13,9 @@ import {
 } from "@/lib/waExtension";
 import { BrandMark } from "@/components/app/BrandMark";
 import CaptureModal from "./CaptureModal";
+import AiTrainingModal from "@/components/AiReplyTraining";
+import { draftReply } from "@/lib/replyAssistant";
+import { useCaptureBlocklist } from "@/lib/useCaptureBlocklist";
 
 const WA_URL = "https://web.whatsapp.com/";
 const MODE_KEY = "dt.waWebMode";
@@ -52,6 +55,8 @@ export default function WaWebView({ openPhone }: { openPhone?: { phone: string; 
   const [active, setActive] = useState<Active>(null);
   const [pendingChats, setPendingChats] = useState<WaExtChat[]>([]);
   const [showCapture, setShowCapture] = useState(false);
+  const [showTrain, setShowTrain] = useState(false);
+  const block = useCaptureBlocklist();
   const [busy, setBusy] = useState("");
   const [note, setNote] = useState("");
   const [phone, setPhone] = useState("");
@@ -91,6 +96,13 @@ export default function WaWebView({ openPhone }: { openPhone?: { phone: string; 
         if (embedded) setFrameSeen(true);
         setSt(d);
         if (d?.authenticated) { refreshPending(); refreshActive(); }
+      }
+      if (event === "frameError" && embedded) {
+        // WhatsApp refuses to run inside another site → use the separate window.
+        setModeState("window");
+        try { localStorage.setItem(MODE_KEY, "window"); } catch { /* ignore */ }
+        waExt.openWindow().catch(() => {});
+        setNote("WhatsApp ne portal ke andar chalne se inkar kar diya (\"Sorry, something went wrong\"). Isliye alag window mein khol diya — left panel yahin kaam karta rahega.");
       }
       if (event === "active") debounce("active", refreshActive, 300);
       if (event === "message") {
@@ -137,6 +149,11 @@ export default function WaWebView({ openPhone }: { openPhone?: { phone: string; 
   const activeJid = active ? realJid(active.id) || realJid(active.messages.find((m) => m.remote)?.remote) : undefined;
   const lead = active ? findLeadForChat({ key: active.id, jid: activeJid, phone: active.phone || undefined, name: active.name }, data.leads) : undefined;
   const suggestion = active && active.messages.length ? classifyChat(active.messages.filter((m) => m.type !== "call_log").map((m) => ({ text: m.text, fromMe: m.fromMe }))) : null;
+
+  const chatLines = active ? active.messages.filter((m) => m.type !== "call_log").map((m) => ({ text: m.text, fromMe: m.fromMe })) : [];
+  const draft = active && chatLines.length
+    ? draftReply(chatLines, { settings: data.settings, name: lead?.name || active.name || active.pushname, kb: data.settings?.aiKnowledge, company: data.settings?.companyName })
+    : null;
 
   const saveActive = async () => {
     if (!active) return;
@@ -269,6 +286,26 @@ export default function WaWebView({ openPhone }: { openPhone?: { phone: string; 
               {(canLead || can("leads.edit")) && (
                 <button className="btnSmall" disabled={busy === "lead"} onClick={saveActive}>{lead ? "↻ Chat se lead update karein" : "＋ Lead save karein"}</button>
               )}
+              {draft && (
+                <div className="aiSuggest small">
+                  <span>🤖 AI reply draft • {draft.source === "trained" ? "aap ka sikhaya hua" : draft.source === "catalog" ? "catalog se" : draft.source === "default" ? "aam jawab" : "—"}</span>
+                  {draft.text ? <div className="aiDraftText">{draft.text}</div> : null}
+                  <div>{draft.reason}</div>
+                  {draft.text && canReply && (
+                    <div className="waWebRow">
+                      <button className="btnSmall" onClick={() => waExt.open({ chatId: active.id, text: draft.text }).then(() => setNote("Draft WhatsApp chat mein likh diya — check kar ke Send aap dabayein.")).catch((e) => setNote(e.message))}>WhatsApp mein likhein</button>
+                      <button className="btnSmall" onClick={() => { if (active.phone) setPhone(formatLocalPhone(active.phone)); setMsg(draft.text); }}>Quick send mein</button>
+                    </div>
+                  )}
+                  <button className="linkBtn" onClick={() => setShowTrain(true)}>📚 AI ko train karein</button>
+                </div>
+              )}
+              {(active.phone || active.name) && (
+                <button className="linkBtn small" title="Family / courier / personal — capture is ko kabhi nahi chhuega"
+                  onClick={() => block.add({ name: active.name || active.pushname, phone: active.phone }).then(() => setNote("✓ Ye chat ab kabhi capture nahi hogi (personal list)"))}>
+                  🚫 Kabhi capture na karein
+                </button>
+              )}
             </>
           )}
         </div>
@@ -318,11 +355,12 @@ export default function WaWebView({ openPhone }: { openPhone?: { phone: string; 
       <section className="waWebMain">
         <div className="waWebToolbar">
           <div className="segmented">
+            <button className={mode === "window" ? "on" : ""} onClick={() => setMode("window")}>Alag window (behtar)</button>
             <button className={mode === "embed" ? "on" : ""} onClick={() => setMode("embed")}>Portal ke andar (beta)</button>
-            <button className={mode === "window" ? "on" : ""} onClick={() => setMode("window")}>Alag window</button>
           </div>
           {mode === "embed" && <button className="btnSmall" onClick={() => { setFrameSeen(false); setFrameKey((k) => k + 1); }}>↻ Reload</button>}
         </div>
+        {mode === "embed" && <div className="waWebWarn">WhatsApp aksar dusri site ke andar chalne se rok deta hai. Agar "Sorry, something went wrong" aaye to khud alag window mein chala jayega — ya "Alag window" dabayein.</div>}
         {mode === "embed" ? (
           <div className="waWebFrameWrap">
             <iframe
@@ -349,6 +387,7 @@ export default function WaWebView({ openPhone }: { openPhone?: { phone: string; 
         )}
       </section>
 
+      {showTrain && <AiTrainingModal lines={chatLines} onClose={() => setShowTrain(false)} />}
       {showCapture && <CaptureModal source={{ kind: "extension" }} onClose={() => setShowCapture(false)} />}
     </div>
   );
