@@ -3,6 +3,7 @@ import { useData } from "@/contexts/DataContext";
 import { fmtMoney } from "@/lib/db";
 import { saveReportImage, printElementHTML } from "@/lib/exportUtils";
 import GrowthAnalysis from "@/components/GrowthAnalysis";
+import { expenseCategoriesOf, inRange, isExpense, summarize } from "@/lib/finance";
 
 export default function BudgetTab() {
   const { data, addItem, updateItem } = useData();
@@ -13,22 +14,20 @@ export default function BudgetTab() {
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10);
   const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().slice(0, 10);
 
-  let monthIncome = 0, monthExpense = 0;
+  // Shared money rules (src/lib/finance.ts): same numbers as the Dashboard.
+  const monthRows = inRange(data.accounting, monthStart, monthEnd);
+  const monthSum = summarize(monthRows, data.settings);
+  const monthIncome = monthSum.income;
+  const monthExpense = monthSum.totalExpense;
   const catSpend: Record<string, number> = {};
-  data.accounting.forEach((a) => {
-    if (a.date >= monthStart && a.date <= monthEnd) {
-      if (a.type === "IN" && a.category !== "Account Adjustment") monthIncome += a.amount;
-      if (a.type === "OUT" && a.category !== "Account Adjustment") {
-        monthExpense += a.amount;
-        catSpend[a.category || "Other"] = (catSpend[a.category || "Other"] || 0) + a.amount;
-      }
-    }
+  monthRows.filter(isExpense).forEach((a: any) => {
+    catSpend[a.category || "Other"] = (catSpend[a.category || "Other"] || 0) + (Number(a.amount) || 0);
   });
   const savings = monthIncome - monthExpense;
   const savingsTarget = Math.round(monthIncome * 0.5);
   const savingsPct = monthIncome > 0 ? Math.round((savings / monthIncome) * 100) : 0;
 
-  const categories = ["Ads Run","Local Business Ads","Monthly Management","Design Service","Video Editing","Office Expense","Personal Expense","Meal / Dinner","Travel","Team Payout","Other"];
+  const categories = expenseCategoriesOf(data.settings).map((c) => c.name);
 
   // Intelligent budget suggestions based on income
   const suggestedBudgets: Record<string, number> = {};
@@ -104,13 +103,9 @@ export default function BudgetTab() {
     const m = new Date(now.getFullYear(), now.getMonth() - i, 1);
     const mStart = m.toISOString().slice(0, 10);
     const mEnd = new Date(m.getFullYear(), m.getMonth() + 1, 0).toISOString().slice(0, 10);
-    let mIncome = 0, mExpense = 0;
-    data.accounting.forEach((a) => {
-      if (a.date >= mStart && a.date <= mEnd) {
-        if (a.type === "IN" && a.category === "Invoice Paid") mIncome += a.amount;
-        if (a.type === "OUT") mExpense += a.amount;
-      }
-    });
+    // Same income rule as everywhere else (previously only "Invoice Paid" counted here).
+    const mSum = summarize(inRange(data.accounting, mStart, mEnd), data.settings);
+    const mIncome = mSum.income, mExpense = mSum.totalExpense;
     const mSavings = mIncome - mExpense;
     const mTarget = Math.round(mIncome * 0.5);
     const mPct = mIncome > 0 ? Math.round((mSavings / mIncome) * 100) : 0;

@@ -2,6 +2,7 @@
 // Pure, rule-based and computed in the browser from data the portal already
 // has — nothing is sent anywhere. Every insight says why it fired and what to do.
 import { invoiceView } from "./invoice";
+import { isExpense, isIncome } from "./finance";
 
 export type Severity = "good" | "info" | "warn" | "risk";
 
@@ -34,9 +35,7 @@ const pctChange = (a: number, b: number) => (b ? Math.round(((a - b) / b) * 100)
 const rs = (n: number) => `Rs ${Math.round(n).toLocaleString("en-PK")}`;
 const daysBetween = (a: string, b: string) => Math.round((new Date(b).getTime() - new Date(a).getTime()) / 86400000);
 
-/** Income counts every IN entry except internal adjustments (the old dashboard only counted "Invoice Paid"). */
-const isIncome = (a: any) => a.type === "IN" && a.category !== "Account Adjustment";
-const isExpense = (a: any) => a.type === "OUT" && a.category !== "Account Adjustment";
+// Income / expense rules come from finance.ts so every screen agrees.
 
 export function analyzeBusiness(data: any, today = new Date()): Analysis {
   const accounting: any[] = data.accounting || [];

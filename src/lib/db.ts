@@ -29,6 +29,8 @@ export interface AppData {
   budgets: any[];
   assignments: any[];
   queries: any[];
+  /** Monthly targets, one doc per month ("2026-09"). */
+  targets: any[];
 }
 
 export const defaultData: AppData = {
@@ -57,13 +59,14 @@ export const defaultData: AppData = {
   budgets: [],
   assignments: [],
   queries: [],
+  targets: [],
 };
 
 export const ALL_COLLECTIONS = [
   "clients", "projects", "invoices", "accounting",
   "khata", "wallets", "walletTransfers", "team",
   "teamLogs", "payouts", "schedule", "leads", "budgets",
-  "assignments", "queries",
+  "assignments", "queries", "targets",
 ];
 
 export function uid(prefix = "DT") {

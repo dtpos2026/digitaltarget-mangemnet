@@ -46,6 +46,11 @@
       "label": "WhatsApp Connect / Disconnect"
     },
     {
+      "key": "campaigns.manage",
+      "group": "WhatsApp",
+      "label": "WhatsApp Message Center & Campaigns"
+    },
+    {
       "key": "clients.view",
       "group": "Clients",
       "label": "Clients View"
@@ -149,6 +154,11 @@
       "key": "data.manage",
       "group": "Administration",
       "label": "Backup / Restore / Reset"
+    },
+    {
+      "key": "history.manage",
+      "group": "Administration",
+      "label": "Administrator History & Monthly Closing"
     }
   ],
   "superRoles": [
@@ -234,7 +244,8 @@
       "team.manage",
       "settings.manage",
       "data.manage",
-      "performance.view"
+      "performance.view",
+      "campaigns.manage"
     ],
     "lead_manager": [
       "leads.view",
@@ -247,7 +258,8 @@
       "schedule.view",
       "schedule.manage",
       "queries.manage",
-      "performance.view"
+      "performance.view",
+      "campaigns.manage"
     ],
     "sales_support": [
       "leads.view",
@@ -369,6 +381,22 @@
     "waStats": [
       "performance.view",
       "whatsapp.view"
+    ],
+    "targets": [
+      "dashboard.view",
+      "finance.view",
+      "reports.view"
+    ],
+    "monthlyArchives": [
+      "history.manage"
+    ],
+    "waCampaigns": [
+      "campaigns.manage"
+    ],
+    "optOuts": [
+      "campaigns.manage",
+      "leads.view",
+      "whatsapp.view"
     ]
   },
   "collectionWrite": {
@@ -424,6 +452,20 @@
     "leadPhoneIndex": [
       "leads.create",
       "leads.edit"
+    ],
+    "targets": [
+      "finance.manage"
+    ],
+    "monthlyArchives": [
+      "history.manage"
+    ],
+    "waCampaigns": [
+      "campaigns.manage"
+    ],
+    "optOuts": [
+      "campaigns.manage",
+      "leads.edit",
+      "whatsapp.reply"
     ]
   },
   "ownScoped": {

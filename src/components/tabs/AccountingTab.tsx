@@ -4,6 +4,9 @@ import { uid, todayISO, fmtMoney } from "@/lib/db";
 import { writeSafeDocument } from "@/lib/safeHtml";
 import ModuleInsights from "@/components/ModuleInsights";
 import { printElementHTML } from "@/lib/exportUtils";
+import {
+  expenseCategoriesOf, incomeCategoriesOf, inRange, monthEnd, monthKey, monthStart, scopeOf, summarize, NEUTRAL_CATEGORIES, ExpenseScope,
+} from "@/lib/finance";
 
 export default function AccountingTab() {
   const { data, addItem, removeItem, updateItem } = useData();
@@ -12,17 +15,34 @@ export default function AccountingTab() {
   const [date, setDate] = useState(todayISO());
   const [clientId, setClientId] = useState("");
   const [projectId, setProjectId] = useState("");
-  const [category, setCategory] = useState("Ads Run");
+  const [category, setCategory] = useState("Invoice Paid");
   const [walletId, setWalletId] = useState("");
   const [amount, setAmount] = useState("");
   const [desc, setDesc] = useState("");
+  const [scope, setScope] = useState<ExpenseScope>("business");
+  const [shown, setShown] = useState(100);
+  const [filterScope, setFilterScope] = useState<"all" | "IN" | ExpenseScope>("all");
 
-  const categories = ["Ads Run","Local Business Ads","Monthly Management","Design Service","Video Editing","Office Expense","Personal Expense","Meal / Dinner","Travel","Team Payout","Invoice Paid","Account Adjustment","Other"];
+  // Categories come from Settings (finance.ts), grouped into business / personal.
+  const expenseCats = expenseCategoriesOf(data.settings);
+  const incomeCats = incomeCategoriesOf(data.settings);
+  const categories = type === "IN" ? [...incomeCats, ...NEUTRAL_CATEGORIES] : [...expenseCats.map((c) => c.name), ...NEUTRAL_CATEGORIES];
+  const pickCategory = (c: string) => {
+    setCategory(c);
+    const known = expenseCats.find((x) => x.name === c);
+    if (known) setScope(known.scope);
+  };
+  const rows = data.accounting
+    .filter((a: any) => filterScope === "all" || (filterScope === "IN" ? a.type === "IN" : a.type === "OUT" && scopeOf(a, data.settings) === filterScope))
+    .slice()
+    .sort((a: any, b: any) => String(b.date || "").localeCompare(String(a.date || "")));
+  const thisMonth = monthKey();
+  const monthSum = summarize(inRange(data.accounting, monthStart(thisMonth), monthEnd(thisMonth)), data.settings);
 
   const clearForm = () => {
     setEditId(null);
     setType("IN"); setDate(todayISO()); setClientId(""); setProjectId("");
-    setCategory("Ads Run"); setWalletId(""); setAmount(""); setDesc("");
+    setCategory("Invoice Paid"); setWalletId(""); setAmount(""); setDesc(""); setScope("business");
   };
 
   const adjustWallet = async (wId: string, deltaIn: number, oldAmt: number, oldType: string, oldWalletId: string) => {
@@ -81,6 +101,7 @@ export default function AccountingTab() {
       await updateItem("accounting", {
         ...old,
         date, type, clientId, projectId, category, walletId, amount: amt, desc,
+        scope: type === "OUT" ? scope : "",
       });
       alert("Entry updated ✅");
     } else {
@@ -92,7 +113,7 @@ export default function AccountingTab() {
           await updateItem("wallets", { ...w, balance: newBal });
         }
       }
-      await addItem("accounting", { id: uid("A"), date, type, clientId, projectId, category, walletId, amount: amt, desc, receipt: null });
+      await addItem("accounting", { id: uid("A"), date, type, clientId, projectId, category, walletId, amount: amt, desc, receipt: null, scope: type === "OUT" ? scope : "", createdAt: new Date().toISOString() });
     }
     clearForm();
   };
@@ -107,6 +128,7 @@ export default function AccountingTab() {
     setWalletId(a.walletId || "");
     setAmount(String(a.amount || ""));
     setDesc(a.desc || "");
+    setScope(scopeOf(a, data.settings));
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
@@ -139,7 +161,7 @@ export default function AccountingTab() {
       <h2>Accounting (Khata) {editId && <span className="badge warn">Editing</span>}</h2>
       <div className="grid2">
         <div><label>Type</label>
-          <select value={type} onChange={(e) => setType(e.target.value)}>
+          <select value={type} onChange={(e) => { setType(e.target.value); setCategory(e.target.value === "IN" ? "Invoice Paid" : expenseCats[0]?.name || "Other Business Cost"); }}>
             <option value="IN">Receive (Income)</option><option value="OUT">Spend (Expense)</option>
           </select>
         </div>
@@ -164,9 +186,24 @@ export default function AccountingTab() {
       </div>
       <div className="grid2">
         <div><label>Category</label>
-          <select value={category} onChange={(e) => setCategory(e.target.value)}>
-            {categories.map(c => <option key={c}>{c}</option>)}
+          <select value={category} onChange={(e) => pickCategory(e.target.value)}>
+            {!categories.includes(category) && <option>{category}</option>}
+            {type === "IN" ? (
+              <>{incomeCats.map((c) => <option key={c}>{c}</option>)}</>
+            ) : (
+              <>
+                <optgroup label="Business expenses">{expenseCats.filter((c) => c.scope === "business").map((c) => <option key={c.name}>{c.name}</option>)}</optgroup>
+                <optgroup label="Personal / Miscellaneous">{expenseCats.filter((c) => c.scope === "personal").map((c) => <option key={c.name}>{c.name}</option>)}</optgroup>
+              </>
+            )}
+            <optgroup label="Not income / expense">{NEUTRAL_CATEGORIES.map((c) => <option key={c}>{c}</option>)}</optgroup>
           </select>
+          {type === "OUT" && (
+            <div className="scopePick" role="radiogroup" aria-label="Expense type">
+              <button type="button" className={scope === "business" ? "on" : ""} onClick={() => setScope("business")}>Business</button>
+              <button type="button" className={scope === "personal" ? "on" : ""} onClick={() => setScope("personal")}>Personal / Misc</button>
+            </div>
+          )}
         </div>
         <div><label>Account / Wallet</label>
           <select value={walletId} onChange={(e) => setWalletId(e.target.value)}>
@@ -186,11 +223,22 @@ export default function AccountingTab() {
         <button className="btnSmall" onClick={printAccounting}>Export Accounting</button>
       </div>
       <hr />
+      <div className="moneyStrip">
+        <div><span>Is mahine income</span><b>Rs {fmtMoney(monthSum.income)}</b></div>
+        <div><span>Business kharcha</span><b>Rs {fmtMoney(monthSum.businessExpense)}</b></div>
+        <div><span>Personal / misc</span><b>Rs {fmtMoney(monthSum.personalExpense)}</b></div>
+        <div><span>Net saving</span><b className={monthSum.netSaving < 0 ? "neg" : "pos"}>Rs {fmtMoney(monthSum.netSaving)}</b><em>{monthSum.savingMargin}% margin</em></div>
+      </div>
+      <div className="segmented" style={{ margin: "10px 0" }}>
+        {([["all", "Sab"], ["IN", "Income"], ["business", "Business"], ["personal", "Personal"]] as const).map(([k, l]) => (
+          <button key={k} className={filterScope === k ? "on" : ""} onClick={() => { setFilterScope(k); setShown(100); }}>{l}</button>
+        ))}
+      </div>
       <div className="tablewrap">
         <table>
-          <thead><tr><th>Date</th><th>Type</th><th>Client</th><th>Category</th><th>Amount</th><th>Account</th><th>Receipt</th><th>Action</th></tr></thead>
+          <thead><tr><th>Date</th><th>Type</th><th>Client</th><th>Category</th><th>Scope</th><th>Amount</th><th>Account</th><th>Receipt</th><th>Action</th></tr></thead>
           <tbody>
-            {data.accounting.slice().reverse().map((a) => {
+            {rows.slice(0, shown).map((a) => {
               const c = data.clients.find(x => x.id === a.clientId);
               const w = data.wallets.find(x => x.id === a.walletId);
               return (
@@ -199,6 +247,7 @@ export default function AccountingTab() {
                   <td><span className={`badge ${a.type === "IN" ? "ok" : "bad"}`}>{a.type}</span></td>
                   <td>{c?.name || ""}</td>
                   <td>{a.category}</td>
+                  <td>{a.type === "OUT" ? <span className={`badge ${scopeOf(a, data.settings) === "personal" ? "warn" : ""}`}>{scopeOf(a, data.settings) === "personal" ? "Personal" : "Business"}</span> : ""}</td>
                   <td>{fmtMoney(a.amount)}</td>
                   <td>{w?.name || ""}</td>
                   <td>{a.receipt?.data ? <button className="btnSmall" onClick={() => { const wi = window.open(""); if(wi) writeSafeDocument(wi, `<img src="${a.receipt.data}" style="max-width:100%"/>`); }}>View</button> : ""}</td>
@@ -212,6 +261,7 @@ export default function AccountingTab() {
           </tbody>
         </table>
       </div>
+      {rows.length > shown && <button className="btnSmall" style={{ marginTop: 8 }} onClick={() => setShown(shown + 200)}>Aur dikhayein ({rows.length - shown} baqi)</button>}
     </section>
     </>
   );

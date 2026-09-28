@@ -5,6 +5,8 @@ import { fmtMoney, todayISO } from "@/lib/db";
 import { saveReportImage, printElementHTML } from "@/lib/exportUtils";
 import ModuleInsights from "@/components/ModuleInsights";
 import GrowthTasks from "@/components/GrowthTasks";
+import { summarize } from "@/lib/finance";
+import { invoiceView } from "@/lib/invoice";
 
 function useChart(drawFn: (canvas: HTMLCanvasElement) => void) {
   const ref = useRef<HTMLCanvasElement>(null);
@@ -134,25 +136,20 @@ export default function DashboardTab() {
   })();
   const dashRef = useRef<HTMLDivElement>(null);
 
-  let income = 0, expense = 0;
-  data.accounting.forEach((a) => {
-    // All income except internal balance adjustments (same rule as Budget & Growth).
-    if (a.type === "IN" && a.category !== "Account Adjustment") income += a.amount || 0;
-    if (a.type === "OUT" && a.category !== "Account Adjustment") expense += a.amount || 0;
-  });
-  const profit = income - expense;
+  // Shared money rules (src/lib/finance.ts).
+  const allTime = summarize(data.accounting, data.settings);
+  const income = allTime.income, expense = allTime.totalExpense;
+  const profit = allTime.netSaving;
 
-  let receivable = 0;
-  data.invoices.forEach((inv) => {
-    if (inv.status !== "Paid") receivable += Math.max(0, (inv.grandTotal || 0) - (inv.paidAmount || 0));
-  });
+  // Receivables from the normalised invoice view (legacy invoices included).
+  const receivable = data.invoices.reduce((s: number, inv: any) => s + invoiceView(inv).due, 0);
 
   let payoutsDue = 0;
   data.team.forEach((t) => { payoutsDue += Math.max(0, (t.rate || 0) - (t.paid || 0)); });
 
   const todayTasks = data.schedule.filter((s) => s.date === todayISO()).length;
   const todaySchedule = data.schedule.filter((s) => s.date === todayISO());
-  const pendingInvoices = data.invoices.filter((inv) => inv.status !== "Paid");
+  const pendingInvoices = data.invoices.filter((inv) => invoiceView(inv).due > 0);
 
   let khLena = 0, khDena = 0;
   data.khata.forEach((k) => {
