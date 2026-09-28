@@ -19,6 +19,7 @@ export default function AssignmentsTab() {
   const [category, setCategory] = useState("Video Editing");
   const [deadline, setDeadline] = useState("");
   const [rate, setRate] = useState("");
+  const [projectId, setProjectId] = useState("");
   const [driveLink, setDriveLink] = useState("");
   const [terms, setTerms] = useState(
     "1) Work confidential rahega.\n2) Deadline strictly follow ho.\n3) Payment task approval ke baad release hogi."
@@ -45,6 +46,7 @@ export default function AssignmentsTab() {
       category,
       deadline: deadline || "",
       rate: +rate || 0,
+      projectId,
       driveLink: driveLink.trim(),
       terms: terms.trim(),
       status: "Assigned",
@@ -105,9 +107,15 @@ export default function AssignmentsTab() {
           </div>
           <div><label>Deadline</label><input type="datetime-local" value={deadline} onChange={(e) => setDeadline(e.target.value)} /></div>
         </div>
-        <div className="grid2">
+        <div className="grid3">
           <div><label>Task Title</label><input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. 10 Reels Edit for Brand X" /></div>
           <div><label>Rate / Amount (Rs)</label><input type="number" value={rate} onChange={(e) => setRate(e.target.value)} placeholder="0" /></div>
+          <div><label>Project (optional)</label>
+            <select value={projectId} onChange={(e) => setProjectId(e.target.value)}>
+              <option value="">—</option>
+              {activeOnly(data.projects).filter((p: any) => p.status !== "Complete").map((p: any) => <option key={p.id} value={p.id}>{p.title} — {data.clients.find((c: any) => c.id === p.clientId)?.name || ""}</option>)}
+            </select>
+          </div>
         </div>
         {aiPick && (
           <div className="assignAI">

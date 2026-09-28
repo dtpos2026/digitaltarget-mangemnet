@@ -2,6 +2,73 @@ import React, { useState } from "react";
 import { useData } from "@/contexts/DataContext";
 import { todayISO, fmtMoney } from "@/lib/db";
 import { printElementHTML } from "@/lib/exportUtils";
+import { buildBusinessReport, rangeFor } from "@/lib/reports";
+
+const rs = (n: number) => `Rs ${fmtMoney(Math.round(Number(n) || 0))}`;
+
+/** Full business report: money, invoices, services, leads, clients, projects, team, ads spend. */
+function BusinessReport() {
+  const { data } = useData();
+  const [kind, setKind] = useState<"daily" | "weekly" | "monthly" | "custom">("monthly");
+  const [from, setFrom] = useState(todayISO().slice(0, 8) + "01");
+  const [to, setTo] = useState(todayISO());
+  const range = kind === "custom" ? { from, to } : rangeFor(kind, todayISO());
+  const r = React.useMemo(() => buildBusinessReport(data, range.from, range.to), [data, range.from, range.to]);
+
+  const print = () => {
+    const rows = (t: string, list: string[][]) => `<h3>${t}</h3><table><tbody>${list.map((x) => `<tr>${x.map((c) => `<td>${c}</td>`).join("")}</tr>`).join("")}</tbody></table>`;
+    printElementHTML(
+      rows("Money", [["Income", rs(r.income)], ["Business expense", rs(r.businessExpense)], ["Personal expense", rs(r.personalExpense)], ["Business profit", rs(r.businessProfit)], ["Net saving", rs(r.netSaving)], ["Ads spend", rs(r.adsSpend)]]) +
+      rows("Invoices & payments", [["Invoices", `${r.invoices.count} (billed ${rs(r.invoices.billed)})`], ["Payments received", `${r.payments.count} (${rs(r.payments.amount)})`], ["Outstanding", rs(r.outstanding)]]) +
+      rows("Services", r.services.map((x) => [x.line, rs(x.amount), String(x.count)])) +
+      rows("Leads / Clients / Projects", [["Leads", `${r.leads.total} (converted ${r.leads.converted}, lost ${r.leads.lost})`], ["Clients", `new ${r.clients.added}, active ${r.clients.active}`], ["Projects", `started ${r.projects.started}, completed ${r.projects.completed}, running ${r.projects.running}`]]) +
+      rows("Team", r.team.map((t) => [t.name, `${t.done}/${t.tasks} tasks`, rs(t.cost)])),
+      `Business Report ${r.from} → ${r.to}`);
+  };
+
+  return (
+    <section className="card bizReport">
+      <div className="sectionHead">
+        <div><h2 style={{ margin: 0 }}>Business Report</h2><div className="small">{r.from} → {r.to} • closed months bhi shamil</div></div>
+        <div className="segmented">
+          {(["daily", "weekly", "monthly", "custom"] as const).map((k) => <button key={k} className={kind === k ? "on" : ""} onClick={() => setKind(k)}>{k}</button>)}
+        </div>
+      </div>
+      {kind === "custom" && <div className="grid2"><div><label>From</label><input type="date" value={from} onChange={(e) => setFrom(e.target.value)} /></div><div><label>To</label><input type="date" value={to} onChange={(e) => setTo(e.target.value)} /></div></div>}
+      <div className="moneyStrip" style={{ marginTop: 10 }}>
+        <div><span>Income</span><b>{rs(r.income)}</b></div>
+        <div><span>Business expense</span><b>{rs(r.businessExpense)}</b></div>
+        <div><span>Personal expense</span><b>{rs(r.personalExpense)}</b></div>
+        <div><span>Business profit</span><b className={r.businessProfit < 0 ? "neg" : "pos"}>{rs(r.businessProfit)}</b></div>
+        <div><span>Net saving</span><b className={r.netSaving < 0 ? "neg" : "pos"}>{rs(r.netSaving)}</b></div>
+        <div><span>Ads spend</span><b>{rs(r.adsSpend)}</b></div>
+      </div>
+      <div className="moneyStrip" style={{ marginTop: 8 }}>
+        <div><span>Invoices</span><b>{r.invoices.count}</b><em>billed {rs(r.invoices.billed)} • paid {r.invoices.paidCount} • unpaid {r.invoices.unpaidCount}</em></div>
+        <div><span>Payments</span><b>{r.payments.count}</b><em>{rs(r.payments.amount)}</em></div>
+        <div><span>Outstanding (abhi)</span><b>{rs(r.outstanding)}</b></div>
+        <div><span>Leads</span><b>{r.leads.total}</b><em>converted {r.leads.converted} • lost {r.leads.lost}</em></div>
+        <div><span>Clients</span><b>+{r.clients.added}</b><em>active {r.clients.active}</em></div>
+        <div><span>Projects</span><b>{r.projects.started}</b><em>completed {r.projects.completed} • running {r.projects.running}</em></div>
+      </div>
+      <div className="grid2" style={{ marginTop: 10 }}>
+        <div>
+          <h3 className="growthH">Services (invoiced)</h3>
+          {r.services.length ? r.services.map((x) => <div key={x.line} className="lpRow"><span>{x.line}</span><b>{rs(x.amount)} <em className="small">×{x.count}</em></b></div>) : <div className="small">—</div>}
+          <h3 className="growthH">Expense by category</h3>
+          {r.expenseByCategory.length ? r.expenseByCategory.slice(0, 8).map((x) => <div key={x.name} className="lpRow"><span>{x.name}</span><b>{rs(x.amount)}</b></div>) : <div className="small">—</div>}
+        </div>
+        <div>
+          <h3 className="growthH">Team</h3>
+          {r.team.length ? r.team.map((t) => <div key={t.name} className="lpRow"><span>{t.name} • {t.done}/{t.tasks} tasks</span><b>{rs(t.cost)}</b></div>) : <div className="small">—</div>}
+          <h3 className="growthH">Lead sources</h3>
+          {Object.keys(r.leads.bySource).length ? Object.entries(r.leads.bySource).map(([k, n]) => <div key={k} className="lpRow"><span>{k}</span><b>{n}</b></div>) : <div className="small">—</div>}
+        </div>
+      </div>
+      <div className="rowActions" style={{ marginTop: 10 }}><button className="btnSmall" onClick={print}>Export / Print</button></div>
+    </section>
+  );
+}
 
 export default function ReportsTab() {
   const { data } = useData();
@@ -77,6 +144,8 @@ export default function ReportsTab() {
   };
 
   return (
+    <>
+    <BusinessReport />
     <section className="card">
       <h2>Reports Engine</h2>
       <div className="small">Daily / Weekly / Monthly Closing + Client-wise Profit</div>
@@ -142,5 +211,6 @@ export default function ReportsTab() {
         </>
       )}
     </section>
+    </>
   );
 }

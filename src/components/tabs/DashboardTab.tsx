@@ -5,6 +5,7 @@ import { fmtMoney, todayISO } from "@/lib/db";
 import { saveReportImage, printElementHTML } from "@/lib/exportUtils";
 import ModuleInsights from "@/components/ModuleInsights";
 import GrowthTasks from "@/components/GrowthTasks";
+import BusinessOverview from "@/components/BusinessOverview";
 import { summarize } from "@/lib/finance";
 import { invoiceView } from "@/lib/invoice";
 
@@ -217,6 +218,7 @@ export default function DashboardTab() {
 
   return (
     <>
+      <BusinessOverview />
       <ModuleInsights module="dashboard" />
       <GrowthTasks />
     <section className="card" ref={dashRef}>
@@ -234,9 +236,9 @@ export default function DashboardTab() {
       )}
 
       <div className="kpis">
-        <div className="kpi"><div className="t">Total Income</div><div className="v">Rs {fmtMoney(income)}</div></div>
-        <div className="kpi"><div className="t">Total Expense</div><div className="v">Rs {fmtMoney(expense)}</div></div>
-        <div className="kpi"><div className="t">Net Profit</div><div className="v">Rs {fmtMoney(profit)}</div></div>
+        <div className="kpi"><div className="t">All-time Income</div><div className="v">Rs {fmtMoney(income)}</div></div>
+        <div className="kpi"><div className="t">All-time Expense</div><div className="v">Rs {fmtMoney(expense)}</div></div>
+        <div className="kpi"><div className="t">All-time Net Saving</div><div className="v">Rs {fmtMoney(profit)}</div></div>
         <div className="kpi"><div className="t">Pending Receivables</div><div className="v">Rs {fmtMoney(receivable)}</div></div>
         <div className="kpi"><div className="t">Pending Payouts</div><div className="v">Rs {fmtMoney(payoutsDue)}</div></div>
         <div className="kpi"><div className="t">Today Tasks</div><div className="v">{todayTasks}</div></div>
@@ -314,7 +316,7 @@ export default function DashboardTab() {
                   <>
                     {pendingInvoices.slice(0, 12).map((inv) => {
                       const client = data.clients.find((c) => c.id === inv.clientId);
-                      const due = Math.max(0, (inv.grandTotal || 0) - (inv.paidAmount || 0));
+                      const due = invoiceView(inv).due;
                       return (
                         <tr key={inv.id}>
                           <td>Invoice</td>

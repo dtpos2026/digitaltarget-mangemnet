@@ -97,6 +97,18 @@ export function useGrowthTasks() {
       const t = { ...taskFromInsight(module, insight), status: "dismissed" as const, dismissedAt: new Date().toISOString() };
       return save([...tasks.filter((x) => x.sourceKey !== t.sourceKey || statusOf(x) !== "open"), t]);
     },
+    /**
+     * Acts on a suggestion in one save: done (history, not re-suggested for
+     * 7 days), dismissed (never again) or snoozed for N days.
+     */
+    resolve: (module: ModuleKey, insight: ModuleInsight, how: "done" | "dismissed" | { snoozeDays: number }) => {
+      const t = taskFromInsight(module, insight);
+      const now = new Date().toISOString();
+      const next: GrowthTask = how === "done" ? { ...t, status: "done", done: true, doneAt: now }
+        : how === "dismissed" ? { ...t, status: "dismissed", dismissedAt: now }
+        : { ...t, snoozeUntil: addDays(how.snoozeDays), due: addDays(how.snoozeDays) };
+      return save([...tasks.filter((x) => x.sourceKey !== t.sourceKey || statusOf(x) !== "open"), next]);
+    },
     complete: (id: string) => patch(id, { status: "done", done: true, doneAt: new Date().toISOString(), snoozeUntil: "" }),
     reopen: (id: string) => patch(id, { status: "open", done: false, doneAt: "", dismissedAt: "" }),
     dismiss: (id: string) => patch(id, { status: "dismissed", done: false, dismissedAt: new Date().toISOString() }),

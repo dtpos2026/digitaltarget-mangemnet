@@ -4,6 +4,7 @@ import { uid, todayISO, fmtMoney, dtLocalNowValue, normalizeDT, parseDT, fmtDTSh
 import ModuleInsights from "@/components/ModuleInsights";
 import { printElementHTML } from "@/lib/exportUtils";
 import { activeOnly } from "@/lib/closing";
+import { projectMetrics } from "@/lib/projectInsights";
 
 export default function ProjectsTab() {
   const { data, addItem, removeItem, updateItem } = useData();
@@ -59,12 +60,21 @@ export default function ProjectsTab() {
     return s <= dayEnd && e >= dayStart;
   };
 
+  const active = React.useMemo(() => activeOnly(data.projects), [data.projects]);
+  const metrics = React.useMemo(() => {
+    const m = new Map<string, ReturnType<typeof projectMetrics>>();
+    for (const p of active) m.set(p.id, projectMetrics(p, data));
+    return m;
+  }, [active, data]);
+  const totals = Array.from(metrics.values()).reduce((t, x) => ({ budget: t.budget + x.budget, paid: t.paid + x.paid, due: t.due + x.due, cost: t.cost + x.cost }), { budget: 0, paid: 0, due: 0, cost: 0 });
+
   const printProjects = () => {
     const rows = activeOnly(data.projects).map(p => {
       const c = data.clients.find(x => x.id === p.clientId);
-      return `<tr><td>${c?.name || ""}</td><td>${p.title || ""}</td><td>${p.category || ""}</td><td>${p.status || ""}</td><td>Rs ${fmtMoney(p.budget || 0)}</td></tr>`;
+      const m = projectMetrics(p, data);
+      return `<tr><td>${c?.name || ""}</td><td>${p.title || ""}</td><td>${p.category || ""}</td><td>${p.status || ""}</td><td>Rs ${fmtMoney(m.budget)}</td><td>Rs ${fmtMoney(m.paid)}</td><td>Rs ${fmtMoney(m.cost)}</td><td>Rs ${fmtMoney(m.profit)}</td><td>${m.paymentStatus}</td></tr>`;
     }).join("");
-    printElementHTML(`    <table><thead><tr><th>Client</th><th>Title</th><th>Category</th><th>Status</th><th>Budget</th></tr></thead><tbody>${rows || "<tr><td colspan='5'>No projects</td></tr>"}</tbody></table>`, "Projects Report");
+    printElementHTML(`    <table><thead><tr><th>Client</th><th>Title</th><th>Category</th><th>Status</th><th>Budget</th><th>Received</th><th>Cost</th><th>Profit</th><th>Payment</th></tr></thead><tbody>${rows || "<tr><td colspan='9'>No projects</td></tr>"}</tbody></table>`, "Projects Report");
   };
 
   const renderCalendar = () => {
@@ -179,22 +189,39 @@ export default function ProjectsTab() {
         <button className="btnSmall" onClick={printProjects}>Export Projects</button>
       </div>
       <hr />
+      <div className="moneyStrip">
+        <div><span>Active projects</span><b>{active.length}</b></div>
+        <div><span>Total budget</span><b>Rs {fmtMoney(totals.budget)}</b></div>
+        <div><span>Received</span><b>Rs {fmtMoney(totals.paid)}</b><em>due Rs {fmtMoney(totals.due)}</em></div>
+        <div><span>Cost</span><b>Rs {fmtMoney(totals.cost)}</b></div>
+        <div><span>Profit so far</span><b className={totals.paid - totals.cost < 0 ? "neg" : "pos"}>Rs {fmtMoney(totals.paid - totals.cost)}</b></div>
+      </div>
+      <div className="small" style={{ margin: "6px 0" }}>Cost = is project se linked expenses (Accounting) + assignments ke rates. Received = is project ki invoices ki payments.</div>
       <div className="tablewrap">
         <table>
-          <thead><tr><th>Client</th><th>Title</th><th>Category</th><th>Start</th><th>End</th><th>Duration</th><th>Status</th><th>Action</th></tr></thead>
+          <thead><tr><th>Client</th><th>Title</th><th>Dates</th><th>Money</th><th>Progress / Next action</th><th>Status</th><th>Action</th></tr></thead>
           <tbody>
-            {activeOnly(data.projects).map((p) => {
+            {active.map((p) => {
               const client = data.clients.find(c => c.id === p.clientId);
               const late = isLateProject(p);
               const dur = durationText(p.start, p.end);
+              const m = metrics.get(p.id) || projectMetrics(p, data);
               return (
                 <tr key={p.id} className={late ? "lateRow" : ""}>
                   <td>{client?.name || ""}</td>
-                  <td><b>{p.title}</b><div className="small">{p.category} • Budget: {fmtMoney(p.budget)}</div></td>
-                  <td>{p.category}</td>
-                  <td>{fmtDTShort(p.start)}</td>
-                  <td>{p.end ? fmtDTShort(p.end) : "—"}</td>
-                  <td>{dur || "—"}</td>
+                  <td><b>{p.title}</b><div className="small">{p.category}{m.team.length ? ` • Team: ${m.team.join(", ")}` : ""}</div></td>
+                  <td className="small">{fmtDTShort(p.start)} → {p.end ? fmtDTShort(p.end) : "—"}<div>{dur || ""}{m.daysLeft !== null && p.status !== "Complete" ? ` • ${m.daysLeft >= 0 ? `${m.daysLeft} din baqi` : `${-m.daysLeft} din late`}` : ""}</div></td>
+                  <td className="small prjMoney">
+                    <div>Budget <b>Rs {fmtMoney(m.budget)}</b></div>
+                    <div>Received Rs {fmtMoney(m.paid)}{m.due > 0 ? ` • due Rs ${fmtMoney(m.due)}` : ""}</div>
+                    <div>Cost Rs {fmtMoney(m.cost)} • Profit <b className={m.profit < 0 ? "neg" : "pos"}>Rs {fmtMoney(m.profit)}</b></div>
+                    <span className={`badge ${m.paymentStatus === "Paid" ? "ok" : m.paymentStatus === "No invoice" ? "" : "warn"}`}>{m.paymentStatus}</span>
+                  </td>
+                  <td className="small" style={{ minWidth: 200 }}>
+                    <div className="tpBar prjBar"><div className={m.progress >= 100 ? "ok" : ""} style={{ width: `${m.progress}%` }} /></div>
+                    <div>{m.progress}% • tasks {m.tasksDone}/{m.tasks}</div>
+                    <div className={`prjNext ${m.urgency}`}>🤖 {m.nextAction}</div>
+                  </td>
                   <td>
                     <span className={`badge ${p.status === "Complete" ? "ok" : "warn"}`}>{p.status || "Running"}</span>
                     {late && <span className="badge badgeLate" style={{ marginLeft: 6 }}>LATE</span>}

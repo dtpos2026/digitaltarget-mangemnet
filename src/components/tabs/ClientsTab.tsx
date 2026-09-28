@@ -2,19 +2,23 @@ import React, { useMemo, useState } from "react";
 import { useData } from "@/contexts/DataContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { uid, fmtMoney } from "@/lib/db";
-import { invoiceView, statusClass } from "@/lib/invoice";
+import { invoiceView } from "@/lib/invoice";
 import { leadPhones, normalizePhone, waLink } from "@/lib/phone";
-import { navigate } from "@/lib/navigation";
+import { categoriesOf } from "@/lib/catalog";
 import ModuleInsights from "@/components/ModuleInsights";
+import ClientProfile from "@/components/ClientProfile";
 import { printElementHTML } from "@/lib/exportUtils";
 
-interface ClientForm { name: string; business: string; phone: string; email: string; address: string; services: string; ref: string; status: string }
-const EMPTY: ClientForm = { name: "", business: "", phone: "", email: "", address: "", services: "", ref: "", status: "Active" };
+interface ClientForm { name: string; business: string; phone: string; whatsapp: string; email: string; address: string; category: string; services: string; ref: string; status: string }
+const EMPTY: ClientForm = { name: "", business: "", phone: "", whatsapp: "", email: "", address: "", category: "", services: "", ref: "", status: "Active" };
 
 export default function ClientsTab() {
   const { data, addItem, updateItem, removeItem } = useData();
   const { can } = useAuth();
   const canManage = can("clients.manage");
+  // Clients are never removed by normal users — only an administrator with
+  // History permission can permanently delete one.
+  const canDelete = can("history.manage");
   const [form, setForm] = useState<ClientForm>(EMPTY);
   const [editId, setEditId] = useState("");
   const [open, setOpen] = useState(false);
@@ -49,7 +53,7 @@ export default function ClientsTab() {
 
   const startNew = () => { setForm(EMPTY); setEditId(""); setOpen(true); };
   const startEdit = (c: any) => {
-    setForm({ name: c.name || "", business: c.business || "", phone: c.phone || "", email: c.email || "", address: c.address || "", services: c.services || "", ref: c.ref || "", status: c.status || "Active" });
+    setForm({ name: c.name || "", business: c.business || "", phone: c.phone || "", whatsapp: c.whatsapp || "", email: c.email || "", address: c.address || "", category: c.category || "", services: c.services || "", ref: c.ref || "", status: c.status || "Active" });
     setEditId(c.id); setOpen(true); window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
@@ -58,7 +62,7 @@ export default function ClientsTab() {
     const phoneN = normalizePhone(form.phone);
     const dup = phoneN && data.clients.find((c: any) => c.id !== editId && normalizePhone(c.phone) === phoneN);
     if (dup && !confirm(`Yeh number pehle se client "${dup.name}" ka hai. Phir bhi save karein?`)) return;
-    const payload = { ...form, name: form.name.trim(), phone: form.phone.trim(), email: form.email.trim() };
+    const payload = { ...form, name: form.name.trim(), phone: form.phone.trim(), whatsapp: form.whatsapp.trim(), email: form.email.trim() };
     if (editId) {
       const old = data.clients.find((c: any) => c.id === editId);
       await updateItem("clients", { ...old, ...payload, updatedAt: new Date().toISOString() });
@@ -70,7 +74,7 @@ export default function ClientsTab() {
 
   const remove = async (c: any) => {
     const s = stats[c.id];
-    if (!confirm(`${c.name} delete karein?${s?.invoices ? `\n\nIs client ki ${s.invoices} invoices hain — woh "client nahi mila" dikhayengi.` : ""}`)) return;
+    if (!confirm(`${c.name}\n\nThis action will permanently delete the selected historical data from the database. This cannot be undone.${s?.invoices ? `\n\nIs client ki ${s.invoices} invoices hain — woh "client nahi mila" dikhayengi. Behtar hai client ko Inactive kar dein.` : ""}`)) return;
     await removeItem("clients", c.id);
     if (profileId === c.id) setProfileId("");
   };
@@ -79,11 +83,6 @@ export default function ClientsTab() {
     const rows = list.map((c: any) => { const s = stats[c.id]; return `<tr><td>${c.name}</td><td>${c.business || ""}</td><td>${c.phone || ""}</td><td>${c.status || ""}</td><td>Rs ${fmtMoney(s?.billed || 0)}</td><td>Rs ${fmtMoney(s?.due || 0)}</td></tr>`; }).join("");
     printElementHTML(`<table><thead><tr><th>Name</th><th>Business</th><th>Phone</th><th>Status</th><th>Billed</th><th>Due</th></tr></thead><tbody>${rows || "<tr><td colspan=6>No clients</td></tr>"}</tbody></table>`, "Clients Report");
   };
-
-  const profile = data.clients.find((c: any) => c.id === profileId);
-  const pInvoices = profile ? data.invoices.filter((i: any) => i.clientId === profile.id) : [];
-  const pProjects = profile ? data.projects.filter((p: any) => p.clientId === profile.id) : [];
-  const pLeads = profile ? data.leads.filter((l: any) => leadPhones(l).some((p) => leadPhones({ phone: profile.phone }).includes(p))) : [];
 
   return (
     <>
@@ -119,12 +118,16 @@ export default function ClientsTab() {
             <div><label>Status</label><select value={form.status} onChange={set("status")}><option>Active</option><option>Inactive</option></select></div>
           </div>
           <div className="grid3" style={{ marginTop: 10 }}>
-            <div><label>Phone / WhatsApp</label><input value={form.phone} onChange={set("phone")} placeholder="03xxxxxxxxx" inputMode="tel" /></div>
+            <div><label>Phone</label><input value={form.phone} onChange={set("phone")} placeholder="03xxxxxxxxx" inputMode="tel" /></div>
+            <div><label>WhatsApp (agar alag ho)</label><input value={form.whatsapp} onChange={set("whatsapp")} placeholder="03xxxxxxxxx" inputMode="tel" /></div>
             <div><label>Email</label><input value={form.email} onChange={set("email")} placeholder="client@email.com" /></div>
-            <div><label>Address / City</label><input value={form.address} onChange={set("address")} /></div>
           </div>
-          <div className="grid2" style={{ marginTop: 10 }}>
+          <div className="grid3" style={{ marginTop: 10 }}>
+            <div><label>Address / City</label><input value={form.address} onChange={set("address")} /></div>
+            <div><label>Category</label><select value={form.category} onChange={set("category")}><option value="">—</option>{categoriesOf(data.settings).map((c) => <option key={c}>{c}</option>)}</select></div>
             <div><label>Services</label><input value={form.services} onChange={set("services")} placeholder="Ads, Social media, Website…" /></div>
+          </div>
+          <div style={{ marginTop: 10 }}>
             <div><label>Notes / reference</label><input value={form.ref} onChange={set("ref")} /></div>
           </div>
           <button className="btnSolid" style={{ marginTop: 12 }} onClick={save}>{editId ? "Update Client" : "Save Client"}</button>
@@ -155,7 +158,7 @@ export default function ClientsTab() {
                       <button className="btnSmall" onClick={() => setProfileId(c.id)}>Profile</button>
                       {waLink(c.phone) && <a className="btnSmall" href={waLink(c.phone)!} target="_blank" rel="noreferrer">WhatsApp</a>}
                       {canManage && <button className="btnSmall" onClick={() => startEdit(c)}>Edit</button>}
-                      {canManage && <button className="btnSmall" onClick={() => remove(c)}>Delete</button>}
+                      {canDelete && <button className="btnSmall" onClick={() => remove(c)}>Delete</button>}
                     </td>
                   </tr>
                 );
@@ -166,54 +169,7 @@ export default function ClientsTab() {
         </div>
       </section>
 
-      {profile && (
-        <div className="dtModalBackdrop" onClick={() => setProfileId("")}>
-          <div className="dtModal wide" onClick={(e) => e.stopPropagation()}>
-            <div className="dtModalHead">
-              <div>
-                <b style={{ fontSize: 18 }}>{profile.name}</b>
-                <div className="small">{[profile.business, profile.phone, profile.email, profile.address].filter(Boolean).join(" • ")}</div>
-                {profile.services && <div className="small">Services: {profile.services}</div>}
-              </div>
-              <button className="btnSmall" onClick={() => setProfileId("")}>✕</button>
-            </div>
-            <div className="kpis kpis4">
-              <div className="kpi"><div className="t">Billed</div><div className="v">Rs {fmtMoney(stats[profile.id]?.billed || 0)}</div></div>
-              <div className="kpi"><div className="t">Paid</div><div className="v">Rs {fmtMoney(stats[profile.id]?.paid || 0)}</div></div>
-              <div className="kpi"><div className="t">Due</div><div className="v">Rs {fmtMoney(stats[profile.id]?.due || 0)}</div></div>
-              <div className="kpi"><div className="t">Projects</div><div className="v">{pProjects.length}</div></div>
-            </div>
-            <h3 className="growthH">Invoices</h3>
-            <div className="tablewrap">
-              <table>
-                <thead><tr><th>Invoice</th><th>Date</th><th className="num">Total</th><th className="num">Due</th><th>Status</th></tr></thead>
-                <tbody>
-                  {pInvoices.map((i: any) => { const v = invoiceView(i); return (
-                    <tr key={i.id}><td>{v.number}</td><td>{v.date}</td><td className="num">Rs {fmtMoney(v.grandTotal)}</td><td className="num">Rs {fmtMoney(v.due)}</td><td><span className={`badge ${statusClass(v.status)}`}>{v.status}</span></td></tr>
-                  ); })}
-                  {pInvoices.length === 0 && <tr><td colSpan={5} className="small">Koi invoice nahi.</td></tr>}
-                </tbody>
-              </table>
-            </div>
-            <div className="grid2" style={{ marginTop: 6 }}>
-              <div>
-                <h3 className="growthH">Projects</h3>
-                {pProjects.length ? pProjects.map((p: any) => <div key={p.id} className="small">• {p.title} — {p.status || "Running"}</div>) : <div className="small">—</div>}
-              </div>
-              <div>
-                <h3 className="growthH">Leads / WhatsApp</h3>
-                {pLeads.length ? pLeads.map((l: any) => (
-                  <div key={l.id} className="small">
-                    • {l.name} — {l.status} ({l.source || "—"})
-                    {l.conversationId && can("whatsapp.view") && <button className="linkBtn" style={{ marginLeft: 6 }} onClick={() => { setProfileId(""); navigate({ tab: "whatsapp", conversationId: l.conversationId }); }}>Chat</button>}
-                  </div>
-                )) : <div className="small">—</div>}
-              </div>
-            </div>
-            {profile.ref && <><h3 className="growthH">Notes</h3><div className="small" style={{ whiteSpace: "pre-wrap" }}>{profile.ref}</div></>}
-          </div>
-        </div>
-      )}
+      {profileId && <ClientProfile clientId={profileId} onClose={() => setProfileId("")} />}
     </>
   );
 }
