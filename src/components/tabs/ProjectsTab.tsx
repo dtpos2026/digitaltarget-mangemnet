@@ -3,6 +3,7 @@ import { useData } from "@/contexts/DataContext";
 import { uid, todayISO, fmtMoney, dtLocalNowValue, normalizeDT, parseDT, fmtDTShort, durationText, isLateProject } from "@/lib/db";
 import ModuleInsights from "@/components/ModuleInsights";
 import { printElementHTML } from "@/lib/exportUtils";
+import { activeOnly } from "@/lib/closing";
 
 export default function ProjectsTab() {
   const { data, addItem, removeItem, updateItem } = useData();
@@ -59,7 +60,7 @@ export default function ProjectsTab() {
   };
 
   const printProjects = () => {
-    const rows = data.projects.map(p => {
+    const rows = activeOnly(data.projects).map(p => {
       const c = data.clients.find(x => x.id === p.clientId);
       return `<tr><td>${c?.name || ""}</td><td>${p.title || ""}</td><td>${p.category || ""}</td><td>${p.status || ""}</td><td>Rs ${fmtMoney(p.budget || 0)}</td></tr>`;
     }).join("");
@@ -77,7 +78,7 @@ export default function ProjectsTab() {
     }
     for (let day = 1; day <= last.getDate(); day++) {
       const dateObj = new Date(calYear, calMonth, day);
-      const todays = data.projects.filter(p => activeOnDate(p, dateObj));
+      const todays = activeOnly(data.projects).filter(p => activeOnDate(p, dateObj));
       cells.push(
         <div key={day} className="dayCell">
           <div className="dayNum">{day}</div>
@@ -110,7 +111,7 @@ export default function ProjectsTab() {
   };
 
   const renderTimeline = () => {
-    const sorted = [...data.projects].sort((a, b) => {
+    const sorted = [...activeOnly(data.projects)].sort((a, b) => {
       const sa = parseDT(a.start) || new Date(0);
       const sb = parseDT(b.start) || new Date(0);
       return sa.getTime() - sb.getTime();
@@ -182,7 +183,7 @@ export default function ProjectsTab() {
         <table>
           <thead><tr><th>Client</th><th>Title</th><th>Category</th><th>Start</th><th>End</th><th>Duration</th><th>Status</th><th>Action</th></tr></thead>
           <tbody>
-            {data.projects.map((p) => {
+            {activeOnly(data.projects).map((p) => {
               const client = data.clients.find(c => c.id === p.clientId);
               const late = isLateProject(p);
               const dur = durationText(p.start, p.end);

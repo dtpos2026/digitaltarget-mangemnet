@@ -148,7 +148,9 @@ service cloud.firestore {
       allow read: if member(ws) && (canAny(readPerms(col)) || ownRead(col, id));
       allow create: if member(ws) && canAny(writePerms(col));
       allow update: if member(ws) && canAny(writePerms(col)) && (!archived() || isHistorian());
-      allow delete: if member(ws) && (
+      // The administrator may delete protected / archived records, but only in
+      // business collections (writePerms): never the audit log, chats, outbox…
+      allow delete: if member(ws) && writePerms(col).size() > 0 && (
         isHistorian() ||
         (canAny(writePerms(col)) && !deleteProtected(col) && !archived())
       );

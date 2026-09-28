@@ -64,6 +64,7 @@ export const TAB_PERMISSIONS: Record<string, Permission[]> = {
   queries: ["queries.manage"],
   settings: ["settings.manage", "users.manage", "audit.view"],
   myportal: ["myportal.view"],
+  history: ["history.manage"],
 };
 
 /**

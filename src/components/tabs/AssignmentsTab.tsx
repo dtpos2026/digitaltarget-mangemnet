@@ -4,6 +4,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { uid, todayISO, fmtMoney } from "@/lib/db";
 import { saveElementAsImage } from "@/lib/exportUtils";
 import ModuleInsights from "@/components/ModuleInsights";
+import { activeOnly } from "@/lib/closing";
 
 const STATUS_OPTIONS = ["Assigned", "In Progress", "Submitted", "Revision", "Completed", "Cancelled"];
 
@@ -71,7 +72,8 @@ export default function AssignmentsTab() {
     }, 300);
   };
 
-  const filtered = data.assignments
+  // Finished work of closed months lives in Administrator History.
+  const filtered = activeOnly(data.assignments)
     .filter((a: any) => !filterMember || a.memberId === filterMember)
     .filter((a: any) => !filterStatus || a.status === filterStatus)
     .sort((a: any, b: any) => String(b.assignedAt || "").localeCompare(String(a.assignedAt || "")));

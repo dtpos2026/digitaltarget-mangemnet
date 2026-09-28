@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { useData } from "@/contexts/DataContext";
 import { uid, todayISO, fmtMoney } from "@/lib/db";
 import { writeSafeDocument } from "@/lib/safeHtml";
+import { activeOnly } from "@/lib/closing";
 
 export default function ScheduleTab() {
   const { data, addItem, removeItem, updateItem } = useData();
@@ -49,7 +50,7 @@ export default function ScheduleTab() {
 
   const buildBrandedSheet = (mode: "today" | "all" | "range", fromDate?: string, toDate?: string) => {
     const logo = data.settings?.logo?.data || "";
-    let rows = data.schedule.slice();
+    let rows = activeOnly(data.schedule).slice();
     let title = "";
     if (mode === "today") {
       rows = rows.filter(s => s.date === date);
@@ -136,7 +137,7 @@ export default function ScheduleTab() {
   };
 
   const exportThermal = (mm: string, fmt: string) => {
-    const rows = data.schedule.filter(s => s.date === date).sort((a: any, b: any) => String(a.time || "").localeCompare(String(b.time || "")));
+    const rows = activeOnly(data.schedule).filter(s => s.date === date).sort((a: any, b: any) => String(a.time || "").localeCompare(String(b.time || "")));
     const width = mm === "80" ? "78mm" : "56mm";
     const logo = data.settings?.logo?.data || "";
     const body = rows.map((s, idx) => {
@@ -236,7 +237,7 @@ export default function ScheduleTab() {
         <table>
           <thead><tr><th>Date</th><th>Category</th><th>Client / Project</th><th>Task</th><th>Priority</th><th>Status</th><th>Payment</th><th>Assigned</th><th>Action</th></tr></thead>
           <tbody>
-            {data.schedule.slice().reverse().map((s) => {
+            {activeOnly(data.schedule).slice().reverse().map((s) => {
               const c = data.clients.find(x => x.id === s.clientId);
               const p = data.projects.find(x => x.id === s.projectId);
               return (

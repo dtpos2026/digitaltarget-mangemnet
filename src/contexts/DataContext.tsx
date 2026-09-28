@@ -29,7 +29,7 @@ interface DataContextType {
   updateSettings: (settings: any) => Promise<void>;
   /** Atomic wallet balance change (+ in, − out). */
   adjustWallet: (walletId: string, delta: number, reason?: string) => Promise<void>;
-  reload: () => Promise<void>;
+  reload: (opts?: { silent?: boolean }) => Promise<void>;
   restoreData: (jsonData: any) => Promise<void>;
   resetData: (scope: string, cutoffDate: string | null) => Promise<void>;
   logAudit: (entry: AuditEntry) => void;
@@ -71,12 +71,13 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     [perms, roleDoc?.teamId]
   );
 
-  const reload = useCallback(async () => {
+  /** Reloads everything. `silent` keeps the current screen mounted (no loading screen). */
+  const reload = useCallback(async (opts?: { silent?: boolean }) => {
     if (!workspaceUid) return;
-    setLoading(true);
+    if (!opts?.silent) setLoading(true);
     const d = await loadAllData(workspaceUid, scope);
     setData(d);
-    setLoading(false);
+    if (!opts?.silent) setLoading(false);
   }, [workspaceUid, scope]);
 
   useEffect(() => {

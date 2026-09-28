@@ -303,6 +303,66 @@ describe("notifications and audit log", () => {
 // firebase-tools sends the storage emulator's cross-service Firestore lookups
 // through HTTPS_PROXY (it ignores NO_PROXY), so behind a proxy firestore.get()
 // in storage.rules always sees "not found". Run without a proxy to verify.
+describe("monthly closing & history protection", () => {
+  beforeEach(async () => {
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      const f = ctx.firestore();
+      await setDoc(doc(f, `users/${WS}/clients/C1`), { id: "C1", name: "Abdullah Medicare" });
+      await setDoc(doc(f, `users/${WS}/invoices/OLD`), { id: "OLD", grandTotal: 500, archivedMonth: "2026-08" });
+      await setDoc(doc(f, `users/${WS}/monthlyArchives/2026-08`), { id: "2026-08", month: "2026-08", status: "closed" });
+      await setDoc(doc(f, `users/${WS}/projects/P1`), { id: "P1", title: "Done", status: "Complete" });
+    });
+  });
+
+  it("clients are never deleted from the normal portal; only the administrator can", async () => {
+    await assertFails(deleteDoc(wsDoc("manager", "clients/C1")));
+    await assertSucceeds(updateDoc(wsDoc("manager", "clients/C1"), { phone: "0300" }));
+    await assertSucceeds(deleteDoc(wsDoc("admin", "clients/C1")));
+  });
+
+  it("closed-month records are read-only for everyone but the administrator", async () => {
+    await assertSucceeds(getDoc(wsDoc("acct", "invoices/OLD")));
+    await assertFails(updateDoc(wsDoc("acct", "invoices/OLD"), { grandTotal: 1 }));
+    await assertFails(deleteDoc(wsDoc("manager", "invoices/OLD")));
+    await assertSucceeds(updateDoc(wsDoc("admin", "invoices/OLD"), { note: "fix" }));
+    await assertSucceeds(deleteDoc(wsDoc("admin", "invoices/OLD")));
+  });
+
+  it("only the administrator reads or writes the archive", async () => {
+    await assertFails(getDoc(wsDoc("manager", "monthlyArchives/2026-08")));
+    await assertFails(setDoc(wsDoc("manager", "monthlyArchives/2026-09"), { month: "2026-09" }));
+    await assertSucceeds(getDoc(wsDoc("admin", "monthlyArchives/2026-08")));
+    await assertSucceeds(setDoc(wsDoc("admin", "monthlyArchives/2026-09"), { month: "2026-09", status: "closing" }));
+  });
+
+  it("closing stamps records (admin); a manager cannot archive or un-archive", async () => {
+    await assertSucceeds(updateDoc(wsDoc("admin", "projects/P1"), { archivedMonth: "2026-09" }));
+    await assertFails(updateDoc(wsDoc("manager", "projects/P1"), { archivedMonth: "" }));
+  });
+
+  it("even the administrator cannot delete the audit log or chat data", async () => {
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), `users/${WS}/auditLogs/A1`), { actorUid: "admin", action: "x" });
+      await setDoc(doc(ctx.firestore(), `users/${WS}/waConversations/923001234567`), { id: "923001234567" });
+    });
+    await assertFails(deleteDoc(wsDoc("admin", "auditLogs/A1")));
+    await assertFails(deleteDoc(wsDoc("admin", "waConversations/923001234567")));
+  });
+
+  it("targets: finance managers write, dashboard users read", async () => {
+    await assertSucceeds(setDoc(wsDoc("acct", "targets/2026-10"), { month: "2026-10", revenue: 500000 }));
+    await assertSucceeds(getDoc(wsDoc("manager", "targets/2026-10")));
+    await assertFails(setDoc(wsDoc("sales", "targets/2026-10"), { month: "2026-10", revenue: 1 }));
+  });
+
+  it("campaigns and opt-outs need the Message Center permission", async () => {
+    await assertSucceeds(setDoc(wsDoc("leadmgr", "waCampaigns/X"), { id: "X", status: "draft" }));
+    await assertFails(setDoc(wsDoc("acct", "waCampaigns/Y"), { id: "Y" }));
+    await assertSucceeds(setDoc(wsDoc("leadmgr", "optOuts/923001234567"), { phone: "923001234567" }));
+    await assertFails(getDocs(collection(db("acct"), `users/${WS}/optOuts`)));
+  });
+});
+
 describe("storage (WhatsApp media)", () => {
   const path = `workspaces/${WS}/whatsapp/C1/photo.jpg`;
   it.skipIf(!!(process.env.HTTPS_PROXY || process.env.HTTP_PROXY))("inbox readers can download media; nobody uploads from the client", async () => {

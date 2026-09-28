@@ -2,6 +2,7 @@ import React, { useState, useMemo, useEffect, lazy, Suspense } from "react";
 
 // Heavier pages (charts, PDF export) load on first open.
 const InvoicesTab = lazy(() => import("@/components/tabs/InvoicesTab"));
+const AdminHistoryTab = lazy(() => import("@/components/tabs/AdminHistoryTab"));
 const PerformanceTab = lazy(() => import("@/components/tabs/PerformanceTab"));
 import { useAuth } from "@/contexts/AuthContext";
 import { useData } from "@/contexts/DataContext";
@@ -47,6 +48,7 @@ const ALL_TABS: TabDef[] = [
   { id: "budget", label: "Budget & Growth", countKey: "budget" },
   { id: "queries", label: "Queries", countKey: "queries" },
   { id: "settings", label: "Settings", countKey: "settings" },
+  { id: "history", label: "Admin History", countKey: "history" },
   { id: "myportal", label: "My Portal", countKey: "myportal" },
 ];
 
@@ -109,6 +111,7 @@ export default function MainApp() {
       case "budget": return null;
       case "queries": return data.queries.filter((q: any) => (q.status || "Open") === "Open").length || data.queries.length;
       case "settings":
+      case "history":
       case "whatsapp":
       case "myportal":
       case "performance":
@@ -148,6 +151,7 @@ export default function MainApp() {
       case "accounts": return <AccountsTab />;
       case "team": return <TeamTab />;
       case "schedule": return <ScheduleTab />;
+      case "history": return <AdminHistoryTab />;
       case "reports": return <ReportsTab />;
       case "leads": return <LeadsTab />;
       case "budget": return <BudgetTab />;

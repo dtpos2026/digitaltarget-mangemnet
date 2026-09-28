@@ -19,6 +19,7 @@ import { activeServicesOf, DURATIONS, DurationId, isRecurring, linesOf, serviceB
 import WhatsAppComposer from "@/components/WhatsAppComposer";
 import ModuleInsights from "@/components/ModuleInsights";
 import { printElementHTML } from "@/lib/exportUtils";
+import { activeOnly } from "@/lib/closing";
 
 const emptyItem = (): InvoiceItem => ({ desc: "", qty: 1, price: 0, total: 0 });
 
@@ -80,6 +81,7 @@ export default function InvoicesTab() {
   const [payRef, setPayRef] = useState("");
   const [payNotes, setPayNotes] = useState("");
   const [composer, setComposer] = useState<{ inv: any; types: string[]; paidNow?: number } | null>(null);
+  const [showClosed, setShowClosed] = useState(false);
 
   const totals = calcTotals(items, discountType, discountValue, taxRate);
   const clientOf = (id: string) => data.clients.find((c: any) => c.id === id);
@@ -258,7 +260,8 @@ export default function InvoicesTab() {
       if (firstPay) await postPayment(inv, firstPay);
       if (renewalOf) {
         const old = data.invoices.find((x: any) => x.id === renewalOf);
-        if (old) await updateItem("invoices", { ...old, renewedBy: inv.id, renewedAt: new Date().toISOString() });
+        // Closed-month invoices are read-only for normal users; the link lives on the new invoice (renewalOf).
+        if (old && (!old.archivedMonth || can("history.manage"))) await updateItem("invoices", { ...old, renewedBy: inv.id, renewedAt: new Date().toISOString() });
       }
       setEditorOpen(false);
       setPreviewInv(inv);
@@ -473,7 +476,8 @@ export default function InvoicesTab() {
   };
 
   // ---------- list ----------
-  const views = useMemo(() => data.invoices.map((inv: any) => ({ inv, v: invoiceView(inv) })), [data.invoices]);
+  // Paid invoices of closed months live in Administrator History; unpaid ones always stay here.
+  const views = useMemo(() => (showClosed ? data.invoices : activeOnly(data.invoices)).map((inv: any) => ({ inv, v: invoiceView(inv) })), [data.invoices, showClosed]);
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     return views
@@ -483,10 +487,13 @@ export default function InvoicesTab() {
       .map(({ inv }) => inv);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [views, search, filter, catFilter, data.clients]);
+  // A package counts as renewed when a later invoice points back to it (works for closed months too).
+  const renewedIds = useMemo(() => new Set(data.invoices.map((i: any) => i.renewalOf).filter(Boolean)), [data.invoices]);
   const renewals = useMemo(() => data.invoices
+    .filter((inv: any) => !renewedIds.has(inv.id))
     .map((inv: any) => ({ inv, state: renewalState(inv, renewDays), left: daysToEnd(inv.endDate) }))
     .filter((r: any) => (r.state === "due_soon" || r.state === "expired") && (r.left ?? 0) >= -45)
-    .sort((a: any, b: any) => (a.left ?? 0) - (b.left ?? 0)), [data.invoices, renewDays]);
+    .sort((a: any, b: any) => (a.left ?? 0) - (b.left ?? 0)), [data.invoices, renewDays, renewedIds]);
   const kpi = views.reduce((k, { v }) => ({
     total: k.total + v.grandTotal, paid: k.paid + v.paid, due: k.due + v.due, overdue: k.overdue + (v.status === "Overdue" ? 1 : 0),
   }), { total: 0, paid: 0, due: 0, overdue: 0 });
@@ -715,6 +722,12 @@ export default function InvoicesTab() {
               <option value="ALL">All categories</option>
               {lines.map((l) => <option key={l}>{l}</option>)}
             </select>
+            {can("history.manage") && (
+              <label className="permItem" style={{ margin: 0 }}>
+                <input type="checkbox" checked={showClosed} onChange={(e) => setShowClosed(e.target.checked)} />
+                <span className="small">Closed months bhi</span>
+              </label>
+            )}
             {["ALL", "Unpaid", "Partial", "Overdue", "Paid"].map((f) => (
               <button key={f} className={`waChip ${filter === f ? "active" : ""}`} onClick={() => setFilter(f)}>{f === "ALL" ? "All" : f}</button>
             ))}
@@ -728,7 +741,7 @@ export default function InvoicesTab() {
                 const v = invoiceView(inv);
                 return (
                   <tr key={inv.id}>
-                    <td style={{ whiteSpace: "nowrap" }}><b>{v.number}</b></td>
+                    <td style={{ whiteSpace: "nowrap" }}><b>{v.number}</b>{inv.archivedMonth && <div className="small">🔒 {inv.archivedMonth}</div>}</td>
                     <td>{clientOf(inv.clientId)?.name || "—"}<div className="small">{projectOf(inv.projectId)?.title || ""}</div></td>
                     <td>{inv.category ? <span className="badge pri">{inv.category}</span> : <span className="small">—</span>}</td>
                     <td>{v.date}<div className="small">{inv.dueDate ? `Due ${inv.dueDate}` : ""}</div></td>
@@ -736,10 +749,10 @@ export default function InvoicesTab() {
                       <>
                         <div className="small">{inv.startDate} → {inv.endDate}</div>
                         <div>{inv.packageName && <span className="small">{inv.packageName} </span>}{(() => {
-                          const st = renewalState(inv, renewDays); const left = daysToEnd(inv.endDate);
+                          const st = renewedIds.has(inv.id) ? "none" : renewalState(inv, renewDays); const left = daysToEnd(inv.endDate);
                           return st === "expired" ? <span className="badge bad">Expired</span>
                             : st === "due_soon" ? <span className="badge warn">{left} din baqi</span>
-                            : inv.renewedBy ? <span className="badge ok">Renewed</span>
+                            : inv.renewedBy || renewedIds.has(inv.id) ? <span className="badge ok">Renewed</span>
                             : st === "active" ? <span className="badge">{durationLabel(inv.duration) || "Active"}</span> : null;
                         })()}</div>
                       </>
@@ -751,10 +764,10 @@ export default function InvoicesTab() {
                       <button className="btnSmall" onClick={() => { setPreviewInv(inv); setPreviewMode("A4"); }}>View</button>
                       {canManage && v.due > 0 && <button className="btnSmall" onClick={() => openPayment(inv)}>Record payment</button>}
                       {canManage && v.due > 0 && <button className="btnSmall" onClick={() => markPaid(inv)} disabled={busy}>✓ Mark Paid</button>}
-                      {canManage && inv.endDate && !inv.renewedBy && <button className="btnSmall" onClick={() => startRenewal(inv)}>↻ Renew</button>}
-                      {canManage && <button className="btnSmall" onClick={() => startEdit(inv)}>Edit</button>}
+                      {canManage && inv.endDate && !inv.renewedBy && !renewedIds.has(inv.id) && <button className="btnSmall" onClick={() => startRenewal(inv)}>↻ Renew</button>}
+                      {canManage && (!inv.archivedMonth || can("history.manage")) && <button className="btnSmall" onClick={() => startEdit(inv)}>Edit</button>}
                       <button className="btnSmall" onClick={() => openWa(inv)} title="Send on WhatsApp">WhatsApp</button>
-                      {canManage && <button className="btnSmall" onClick={() => handleDelete(inv)}>Delete</button>}
+                      {canManage && (!inv.archivedMonth || can("history.manage")) && <button className="btnSmall" onClick={() => handleDelete(inv)}>Delete</button>}
                     </td>
                   </tr>
                 );

@@ -2,6 +2,7 @@ import React, { useMemo, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useData } from "@/contexts/DataContext";
 import { fmtMoney, todayISO, uid } from "@/lib/db";
+import { activeOnly } from "@/lib/closing";
 
 const STATUS_OPTIONS = ["Assigned", "In Progress", "Submitted", "Revision", "Completed"];
 
@@ -11,12 +12,12 @@ export default function MyPortalTab() {
   const teamId = roleDoc?.teamId || "";
 
   const me = useMemo(() => data.team.find(t => t.id === teamId), [data.team, teamId]);
-  const myAssignments = data.assignments
+  const myAssignments = activeOnly(data.assignments)
     .filter((a: any) => a.memberId === teamId)
     .sort((a: any, b: any) => String(b.assignedAt || "").localeCompare(String(a.assignedAt || "")));
   const myLogs = data.teamLogs.filter((l: any) => l.memberId === teamId);
   const myPayouts = data.payouts.filter((p: any) => p.memberId === teamId);
-  const mySchedule = data.schedule.filter((s: any) => s.assignedTo === teamId);
+  const mySchedule = activeOnly(data.schedule).filter((s: any) => s.assignedTo === teamId);
   const myQueries = data.queries
     .filter((q: any) => q.memberId === teamId)
     .sort((a: any, b: any) => String(b.createdAt || "").localeCompare(String(a.createdAt || "")));

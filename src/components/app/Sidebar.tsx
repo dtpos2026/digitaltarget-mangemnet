@@ -1,7 +1,7 @@
 import React from "react";
 import {
   BarChart3, BookOpen, Briefcase, CalendarDays, ClipboardList, FileText, Gauge, HelpCircle, LogOut,
-  MessageCircle, Settings, Target, User, Users, UsersRound, Wallet, Receipt, Activity, TrendingUp, type LucideIcon,
+  MessageCircle, Settings, Archive, Target, User, Users, UsersRound, Wallet, Receipt, Activity, TrendingUp, type LucideIcon,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { roleLabel } from "@/lib/permissions";
@@ -17,7 +17,7 @@ const ICONS: Record<string, LucideIcon> = {
   dash: Gauge, myportal: User, whatsapp: MessageCircle, leads: Target, clients: UsersRound, performance: Activity,
   projects: Briefcase, assignments: ClipboardList, schedule: CalendarDays, queries: HelpCircle, team: Users,
   invoices: Receipt, accounting: BookOpen, khata: FileText, accounts: Wallet, budget: TrendingUp, reports: BarChart3,
-  settings: Settings,
+  settings: Settings, history: Archive,
 };
 
 /** Sidebar sections (tabs the user cannot access are simply not listed). */
@@ -26,7 +26,7 @@ export const NAV_GROUPS: { title: string; ids: string[] }[] = [
   { title: "CRM & Marketing", ids: ["whatsapp", "leads", "clients", "performance"] },
   { title: "Work", ids: ["projects", "assignments", "schedule", "queries", "team"] },
   { title: "Finance", ids: ["invoices", "accounting", "khata", "accounts", "budget", "reports"] },
-  { title: "Administration", ids: ["settings"] },
+  { title: "Administration", ids: ["settings", "history"] },
 ];
 
 interface Props {
