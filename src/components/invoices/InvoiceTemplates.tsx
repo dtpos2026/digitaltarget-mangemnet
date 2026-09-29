@@ -221,7 +221,9 @@ export interface PosOptions {
   /** "receipt" = full bill; "token" = short slip you can hand to the client. */
   variant: "receipt" | "token";
 }
-export const DEFAULT_POS: PosOptions = { width: 80, margin: 3, scale: 1, variant: "receipt" };
+/** Thermal printers only print ~72 mm of an 80 mm roll (~48 mm of 58 mm): the default side margin keeps the content inside that area. */
+export const POS_MARGIN = { 58: 3, 80: 5 } as const;
+export const DEFAULT_POS: PosOptions = { width: 80, margin: POS_MARGIN[80], scale: 1, variant: "receipt" };
 
 export function InvoicePOS({ inv, client, project, settings, qr, pos }: Props & { pos?: PosOptions }) {
   const o = { ...DEFAULT_POS, ...(pos || {}) };

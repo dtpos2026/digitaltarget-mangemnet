@@ -13,7 +13,7 @@ import {
   lineTotal, nextInvoiceNo, PAYMENT_METHODS, statusClass, endDateFor, durationLabel, daysToEnd, renewalState,
   paymentsOf, paidTotal,
 } from "@/lib/invoice";
-import { DEFAULT_POS, InvoiceA4, InvoicePOS, PosOptions } from "@/components/invoices/InvoiceTemplates";
+import { DEFAULT_POS, InvoiceA4, InvoicePOS, POS_MARGIN, PosOptions } from "@/components/invoices/InvoiceTemplates";
 import { newVerifyToken, publishVerification, verifyUrl } from "@/lib/invoiceVerify";
 import { activeServicesOf, DURATIONS, DurationId, isRecurring, linesOf, serviceById } from "@/lib/catalog";
 import WhatsAppComposer from "@/components/WhatsAppComposer";
@@ -74,11 +74,11 @@ export default function InvoicesTab() {
   const [previewMode, setPreviewMode] = useState<"A4" | "POS">("A4");
   // Thermal printer setup (remembered in this browser): paper 58/80 mm, side margins, text size, receipt or token.
   const [pos, setPosState] = useState<PosOptions>(() => {
-    try { return { ...DEFAULT_POS, ...JSON.parse(localStorage.getItem("dt.posOptions") || "{}") }; } catch { return DEFAULT_POS; }
+    try { return { ...DEFAULT_POS, ...JSON.parse(localStorage.getItem("dt.posOptions2") || "{}") }; } catch { return DEFAULT_POS; }
   });
   const setPos = (p: Partial<PosOptions>) => setPosState((prev) => {
     const next = { ...prev, ...p };
-    try { localStorage.setItem("dt.posOptions", JSON.stringify(next)); } catch { /* ignore */ }
+    try { localStorage.setItem("dt.posOptions2", JSON.stringify(next)); } catch { /* ignore */ }
     return next;
   });
   const [autoQR, setAutoQR] = useState("");
@@ -837,14 +837,14 @@ export default function InvoicesTab() {
               {previewMode === "POS" && (
                 <div className="posSetup">
                   <div className="segmented">
-                    {([58, 80] as const).map((w) => <button key={w} className={pos.width === w ? "on" : ""} onClick={() => setPos({ width: w, margin: w === 58 ? 2 : 3 })}>{w} mm</button>)}
+                    {([58, 80] as const).map((w) => <button key={w} className={pos.width === w ? "on" : ""} onClick={() => setPos({ width: w, margin: POS_MARGIN[w] })}>{w} mm</button>)}
                   </div>
                   <div className="segmented">
                     <button className={pos.variant === "receipt" ? "on" : ""} onClick={() => setPos({ variant: "receipt" })}>Full bill</button>
                     <button className={pos.variant === "token" ? "on" : ""} onClick={() => setPos({ variant: "token" })}>Token / Paid slip</button>
                   </div>
-                  <label className="posField">Left-Right margin
-                    <input type="range" min={0} max={10} step={0.5} value={pos.margin} onChange={(e) => setPos({ margin: Number(e.target.value) })} />
+                  <label className="posField" title="Print ke kinare kat rahe hon to margin badhayein; bahut khali ho to kam karein">Left-Right margin
+                    <input type="range" min={0} max={14} step={0.5} value={pos.margin} onChange={(e) => setPos({ margin: Number(e.target.value) })} />
                     <b>{pos.margin} mm</b>
                   </label>
                   <label className="posField">Text
