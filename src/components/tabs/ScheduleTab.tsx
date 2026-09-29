@@ -7,6 +7,7 @@ import { parseScheduleText, ScheduleSuggestion, ScheduleType } from "@/lib/sched
 import { useGrowthTasks } from "@/lib/growthTasks";
 import { useAuth } from "@/contexts/AuthContext";
 import { invoiceView, renewalState } from "@/lib/invoice";
+import { useInlineAI } from "@/lib/inlineAI";
 
 // AI types → the schedule's categories.
 const TYPE_TO_CATEGORY: Record<ScheduleType, string> = {
@@ -18,6 +19,7 @@ export default function ScheduleTab() {
   const { data, addItem, removeItem, updateItem } = useData();
   const { can, user } = useAuth();
   const g = useGrowthTasks();
+  const inlineAI = useInlineAI();
   const [aiText, setAiText] = useState("");
   const [sugg, setSugg] = useState<ScheduleSuggestion | null>(null);
   const [editId, setEditId] = useState<string | null>(null);
@@ -267,7 +269,7 @@ export default function ScheduleTab() {
       <h2>Schedule / Daily Work</h2>
       <div className="small">Meeting, payment collection, project follow-up, calls, reminders aur daily field work ko alag categories mein manage karein. Thermal printer ke liye 58mm aur 80mm PNG/JPG export bhi available hai.</div>
 
-      {can("schedule.manage") && (
+      {inlineAI && can("schedule.manage") && (
         <div className="aiSched">
           <div className="lpHead">✨ AI schedule assistant</div>
           <div className="aiSchedRow">

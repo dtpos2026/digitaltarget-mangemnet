@@ -8,7 +8,7 @@ import MarginReport from "@/components/MarginReport";
 const rs = (n: number) => `Rs ${fmtMoney(Math.round(Number(n) || 0))}`;
 
 /** Full business report: money, invoices, services, leads, clients, projects, team, ads spend. */
-function BusinessReport() {
+export function BusinessReport() {
   const { data } = useData();
   const [kind, setKind] = useState<"daily" | "weekly" | "monthly" | "custom">("monthly");
   const [from, setFrom] = useState(todayISO().slice(0, 8) + "01");

@@ -3,6 +3,8 @@ import React, { useState, useMemo, useEffect, lazy, Suspense } from "react";
 // Heavier pages (charts, PDF export) load on first open.
 const InvoicesTab = lazy(() => import("@/components/tabs/InvoicesTab"));
 const AdminHistoryTab = lazy(() => import("@/components/tabs/AdminHistoryTab"));
+import { runDailyAuditPurge } from "@/lib/auditPurge";
+const AiHubTab = lazy(() => import("@/components/AiHubTab"));
 const PerformanceTab = lazy(() => import("@/components/tabs/PerformanceTab"));
 import { useAuth } from "@/contexts/AuthContext";
 import { useData } from "@/contexts/DataContext";
@@ -32,6 +34,7 @@ interface TabDef { id: string; label: string; countKey: string }
 
 const ALL_TABS: TabDef[] = [
   { id: "dash", label: "Dashboard", countKey: "live" },
+  { id: "ai", label: "AI Analysis", countKey: "ai" },
   { id: "whatsapp", label: "WhatsApp", countKey: "whatsapp" },
   { id: "leads", label: "Leads", countKey: "leads" },
   { id: "clients", label: "Clients", countKey: "clients" },
@@ -59,6 +62,13 @@ export default function MainApp() {
     try { return localStorage.getItem("dt-theme") === "dark"; } catch { return false; }
   });
   const [navOpen, setNavOpen] = useState(false);
+  // Daily automatic audit-log cleanup (administrator only, when a retention is set).
+  const { workspaceUid } = useAuth();
+  useEffect(() => {
+    const days = Number(data.settings?.auditRetentionDays) || 0;
+    if (!workspaceUid || !days || !can("history.manage")) return;
+    runDailyAuditPurge(workspaceUid, days, new Date().toISOString().slice(0, 10)).catch(() => {});
+  }, [workspaceUid, data.settings?.auditRetentionDays, can]);
   useEffect(() => {
     document.body.classList.toggle("dark", darkMode);
     try { localStorage.setItem("dt-theme", darkMode ? "dark" : "light"); } catch { /* private mode */ }
@@ -110,6 +120,7 @@ export default function MainApp() {
       case "leads": return data.leads.length;
       case "budget": return null;
       case "queries": return data.queries.filter((q: any) => (q.status || "Open") === "Open").length || data.queries.length;
+      case "ai":
       case "settings":
       case "history":
       case "whatsapp":
@@ -152,6 +163,7 @@ export default function MainApp() {
       case "team": return <TeamTab />;
       case "schedule": return <ScheduleTab />;
       case "history": return <AdminHistoryTab />;
+      case "ai": return <AiHubTab />;
       case "reports": return <ReportsTab />;
       case "leads": return <LeadsTab />;
       case "budget": return <BudgetTab />;

@@ -3,12 +3,14 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useData } from "@/contexts/DataContext";
 import { fmtMoney, todayISO, uid } from "@/lib/db";
 import { activeOnly } from "@/lib/closing";
+import LinkTeamModal from "@/components/LinkTeamModal";
 
 const STATUS_OPTIONS = ["Assigned", "In Progress", "Submitted", "Revision", "Completed"];
 
 export default function MyPortalTab() {
   const { data, updateItem, addItem } = useData();
-  const { roleDoc, user } = useAuth();
+  const { roleDoc, user, isAdmin } = useAuth();
+  const [linking, setLinking] = useState(false);
   const teamId = roleDoc?.teamId || "";
 
   const me = useMemo(() => data.team.find(t => t.id === teamId), [data.team, teamId]);
@@ -86,8 +88,16 @@ export default function MyPortalTab() {
         <h2>My Portal</h2>
         <div style={{ padding: 20, textAlign: "center" }}>
           <p>Aap ka account abhi tak kisi <b>Team Member record</b> se link nahi hua.</p>
-          <p className="small" style={{ marginTop: 6 }}>Apne admin/manager se kahein ke woh Settings → User Management se aap ko link karein.</p>
+          {isAdmin && roleDoc ? (
+            <>
+              <p className="small" style={{ marginTop: 6 }}>Aap administrator hain — neeche se apna account kisi team member se seedha link kar lein.</p>
+              <button className="btnSolid" onClick={() => setLinking(true)}>🔗 Apne aap ko team member se link karein</button>
+            </>
+          ) : (
+            <p className="small" style={{ marginTop: 6 }}>Apne admin/manager se kahein ke woh Settings → User Management → <b>🔗 Link karein</b> se aap ko link karein.</p>
+          )}
         </div>
+        {linking && roleDoc && <LinkTeamModal account={roleDoc} onClose={() => setLinking(false)} />}
       </section>
     );
   }

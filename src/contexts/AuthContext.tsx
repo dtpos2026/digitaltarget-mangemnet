@@ -54,6 +54,8 @@ interface AuthContextType {
   }) => Promise<string>;
   perms: Set<Permission>;
   can: (p: Permission | Permission[]) => boolean;
+  /** Re-reads the signed-in user's role document (after linking a team member, etc.). */
+  refreshRole: () => Promise<void>;
   isAdmin: boolean;
   isTeamMember: boolean;
   hasFullAccess: boolean;
@@ -107,6 +109,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const login = async (email: string, password: string) => {
     await signInWithEmailAndPassword(auth, email, password);
+  };
+
+  const refreshRole = async () => {
+    if (!user) return;
+    try { const r = await fetchRole(user.uid); setRoleDoc(r); } catch (e) { console.error("Role refresh error", e); }
   };
 
   const logout = async () => {
@@ -167,6 +174,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         logout,
         resetPassword,
         createUserAccount,
+        refreshRole,
         perms,
         can,
         isAdmin: isSuperRole(role),

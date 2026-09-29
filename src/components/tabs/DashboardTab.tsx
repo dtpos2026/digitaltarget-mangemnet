@@ -8,6 +8,7 @@ import GrowthTasks from "@/components/GrowthTasks";
 import BusinessOverview from "@/components/BusinessOverview";
 import { summarize } from "@/lib/finance";
 import { invoiceView } from "@/lib/invoice";
+import { useInlineAI } from "@/lib/inlineAI";
 
 function useChart(drawFn: (canvas: HTMLCanvasElement) => void) {
   const ref = useRef<HTMLCanvasElement>(null);
@@ -121,6 +122,7 @@ function drawRing(canvas: HTMLCanvasElement, value: number, max: number, color: 
 }
 
 export default function DashboardTab() {
+  const inlineAI = useInlineAI();
   const { data } = useData();
   const { can } = useAuth();
   const leadStats = (() => {
@@ -220,7 +222,7 @@ export default function DashboardTab() {
     <>
       <BusinessOverview />
       <ModuleInsights module="dashboard" />
-      <GrowthTasks />
+      {inlineAI && <GrowthTasks />}
     <section className="card" ref={dashRef}>
       <h2>Manager Dashboard</h2>
 

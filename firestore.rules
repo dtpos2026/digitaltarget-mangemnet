@@ -118,6 +118,11 @@ service cloud.firestore {
         && resource.data.workspaceUid == me().workspaceUid
         && (!isSuper(resource.data) || isSuper(me()))
         && validRoleWrite(uid);
+      // An administrator may link their OWN account to a team record (My Portal);
+      // nothing else on their own role can change, and other roles cannot do this.
+      allow update: if request.auth.uid == uid && isSuper(resource.data)
+        && resource.data.workspaceUid == me().workspaceUid
+        && changed().hasOnly(['teamId', 'updatedAt', 'updatedBy']);
       // Accounts are disabled (disabled: true), never deleted, so history stays intact.
       allow delete: if false;
     }
@@ -235,10 +240,13 @@ service cloud.firestore {
       allow create: if member(ws) && request.resource.data.createdBy == request.auth.uid;
     }
 
-    // ---------- audit log (append-only) ----------
+    // ---------- audit log ----------
+    // Entries are append-only (never edited). Only the administrator
+    // (history.manage) may delete old ones, to keep storage small.
     match /users/{ws}/auditLogs/{id} {
       allow read: if member(ws) && canAny(['audit.view']);
       allow create: if member(ws) && request.resource.data.actorUid == request.auth.uid;
+      allow delete: if member(ws) && isHistorian();
     }
 
     // ---------- public invoice verification (QR on invoices) ----------

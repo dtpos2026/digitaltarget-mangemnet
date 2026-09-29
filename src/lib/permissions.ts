@@ -47,6 +47,7 @@ export function canAny(perms: Set<Permission>, needed: Permission[]) {
 /** Which permission unlocks each sidebar tab. */
 export const TAB_PERMISSIONS: Record<string, Permission[]> = {
   dash: ["dashboard.view"],
+  ai: ["dashboard.view", "reports.view", "finance.view", "leads.view", "schedule.view"],
   whatsapp: ["whatsapp.view"],
   leads: ["leads.view"],
   clients: ["clients.view"],

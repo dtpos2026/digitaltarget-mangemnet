@@ -13,8 +13,10 @@ import { useAuth } from "@/contexts/AuthContext";
 import ModuleInsights from "@/components/ModuleInsights";
 import { downloadXlsx } from "@/lib/xlsx";
 import { leadsSheets } from "@/lib/leadExport";
+import { useInlineAI } from "@/lib/inlineAI";
 
 export default function LeadsTab() {
+  const inlineAI = useInlineAI();
   const { data, addItem, removeItem, updateItem } = useData();
   const { can, user } = useAuth();
   const [name, setName] = useState("");
@@ -244,7 +246,7 @@ export default function LeadsTab() {
       <div className="kpis kpis5" style={{ marginTop: 10 }}>
         <div className="kpi"><div className="t">Total Leads</div><div className="v">{total}</div></div>
         <div className="kpi"><div className="t">Active Pipeline</div><div className="v">{interested}</div></div>
-        <div className="kpi"><div className="t">Hot (AI)</div><div className="v">{hot}</div></div>
+        {inlineAI && <div className="kpi"><div className="t">Hot (AI)</div><div className="v">{hot}</div></div>}
         <div className="kpi"><div className="t">Follow-ups due</div><div className="v">{followDue}</div></div>
         <div className="kpi"><div className="t">Converted</div><div className="v">{converted}</div></div>
       </div>
@@ -347,10 +349,10 @@ export default function LeadsTab() {
           <option value="ALL">Sab lead types</option>
           {(Object.keys(LEAD_TYPE_LABEL) as LeadType[]).map((k) => <option key={k} value={k}>{LEAD_TYPE_LABEL[k]}</option>)}
         </select>
-        <select value={filterLevel} onChange={(e) => setFilterLevel(e.target.value)} aria-label="Interest">
+        {inlineAI && <select value={filterLevel} onChange={(e) => setFilterLevel(e.target.value)} aria-label="Interest">
           <option value="ALL">Sab interest</option>
           <option>Hot</option><option>Warm</option><option>Cold</option>
-        </select>
+        </select>}
         <select value={filterCat} onChange={(e) => setFilterCat(e.target.value)} aria-label="Business type">
           <option value="ALL">Sab business types</option>
           {categories.map(c => <option key={c}>{c}</option>)}
@@ -363,7 +365,7 @@ export default function LeadsTab() {
           <span>{selected.size ? `${selectedLeads.length} selected` : `Select all (${filtered.length})`}</span>
         </label>
         {selected.size > 0 && <button className="btnSmall" onClick={clearSel}>Clear selection</button>}
-        {can("leads.edit") && <button className="btnSmall" onClick={() => runAI(selectedLeads.length ? selectedLeads : filtered)} disabled={!!aiRun}>✨ AI analyze {selectedLeads.length ? `(${selectedLeads.length})` : `sab (${filtered.length})`}</button>}
+        {inlineAI && can("leads.edit") && <button className="btnSmall" onClick={() => runAI(selectedLeads.length ? selectedLeads : filtered)} disabled={!!aiRun}>✨ AI analyze {selectedLeads.length ? `(${selectedLeads.length})` : `sab (${filtered.length})`}</button>}
         {can("campaigns.manage") && selectedLeads.length > 0 && <button className="btnSolid" onClick={toCampaign}>📣 Message Center ({selectedLeads.length})</button>}
         {can("leads.delete") && selectedLeads.length > 0 && <button className="btnDanger" onClick={bulkDelete}>🗑 Delete ({selectedLeads.length})</button>}
         {aiRun && <span className="small">AI analysis… {aiRun.done}/{aiRun.total}</span>}
@@ -372,7 +374,7 @@ export default function LeadsTab() {
 
       <div className="tablewrap" style={{ marginTop: 6 }}>
         <table className="leadTable">
-          <thead><tr><th style={{ width: 30 }} /><th>Lead</th><th>Service</th><th>Status</th><th>AI (estimate)</th><th>Follow-up</th><th>Source</th><th>Action</th></tr></thead>
+          <thead><tr><th style={{ width: 30 }} /><th>Lead</th><th>Service</th><th>Status</th>{inlineAI && <th>AI (estimate)</th>}<th>Follow-up</th><th>Source</th><th>Action</th></tr></thead>
           <tbody>
             {filtered.slice(0, shown).map((l) => {
               const stClass = l.status === "Converted" ? "ok" : l.status === "Lost" ? "bad" : ["Interested","Demo Given","Meeting Scheduled","Negotiation","Qualified","Proposal"].includes(l.status) ? "warn" : "";
@@ -396,14 +398,14 @@ export default function LeadsTab() {
                       {[...new Set([...statusOptions, l.status])].map(s => <option key={s}>{s}</option>)}
                     </select>
                   </td>
-                  <td className="leadAI">
+                  {inlineAI && <td className="leadAI">
                     {l.ai ? (
                       <>
                         <span className={`badge ${levelClass(l.ai.level)}`}>{l.ai.level} {l.ai.interest}%</span>
                         <div className="small">→ {l.ai.nextAction}</div>
                       </>
                     ) : <span className="small">—</span>}
-                  </td>
+                  </td>}
                   <td>{l.followUpDate ? <span className={late ? "badge bad" : ""}>{l.followUpDate}</span> : "—"}{l.meetingDate ? <div className="small">Meeting {l.meetingDate}</div> : null}</td>
                   <td>{l.source || ""}<div className="small">{leadDay(l)}</div>{l.referralBy ? <div className="small">By: {l.referralBy}</div> : null}</td>
                   <td className="rowActions">

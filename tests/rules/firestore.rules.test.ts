@@ -294,7 +294,7 @@ describe("notifications and audit log", () => {
     await assertSucceeds(setDoc(wsDoc("sales", "auditLogs/AL2"), { id: "AL2", actorUid: "sales", action: "update" }));
     await assertFails(setDoc(wsDoc("sales", "auditLogs/AL3"), { id: "AL3", actorUid: "admin", action: "update" }));
     await assertFails(updateDoc(wsDoc("admin", "auditLogs/AL1"), { action: "tampered" }));
-    await assertFails(deleteDoc(wsDoc("admin", "auditLogs/AL1")));
+    await assertFails(deleteDoc(wsDoc("sales", "auditLogs/AL2")));
     await assertSucceeds(getDoc(wsDoc("admin", "auditLogs/AL1")));
     await assertFails(getDoc(wsDoc("sales", "auditLogs/AL1")));
   });
@@ -340,12 +340,19 @@ describe("monthly closing & history protection", () => {
     await assertFails(updateDoc(wsDoc("manager", "projects/P1"), { archivedMonth: "" }));
   });
 
-  it("even the administrator cannot delete the audit log or chat data", async () => {
+  it("an administrator can link their own account to a team record, nothing else", async () => {
+    await assertSucceeds(updateDoc(doc(db("admin"), "roles/admin"), { teamId: "T1", updatedAt: 1, updatedBy: "admin" }));
+    await assertFails(updateDoc(doc(db("admin"), "roles/admin"), { role: "team_member" }));
+    await assertFails(updateDoc(doc(db("manager"), "roles/manager"), { teamId: "T1", updatedAt: 1, updatedBy: "manager" }));
+  });
+
+  it("only the administrator can clear old audit entries; chat data stays protected", async () => {
     await env.withSecurityRulesDisabled(async (ctx) => {
       await setDoc(doc(ctx.firestore(), `users/${WS}/auditLogs/A1`), { actorUid: "admin", action: "x" });
       await setDoc(doc(ctx.firestore(), `users/${WS}/waConversations/923001234567`), { id: "923001234567" });
     });
-    await assertFails(deleteDoc(wsDoc("admin", "auditLogs/A1")));
+    await assertFails(deleteDoc(wsDoc("manager", "auditLogs/A1")));
+    await assertSucceeds(deleteDoc(wsDoc("admin", "auditLogs/A1")));
     await assertFails(deleteDoc(wsDoc("admin", "waConversations/923001234567")));
   });
 

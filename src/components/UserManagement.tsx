@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useAuth, RoleDoc } from "@/contexts/AuthContext";
 import { useData } from "@/contexts/DataContext";
+import LinkTeamModal from "@/components/LinkTeamModal";
 import { db } from "@/lib/firebase";
 import { collection, doc, getDocs, query, setDoc, where } from "firebase/firestore";
 import {
@@ -133,6 +134,7 @@ export default function UserManagement() {
     }
   };
 
+  const [linking, setLinking] = useState<RoleDoc | null>(null);
   const editable = (u: RoleDoc) => u.uid !== user?.uid && (isAdmin || !isSuperRole(u.role));
 
   const handleChangeRole = async (u: RoleDoc, role: string) => {
@@ -250,11 +252,10 @@ export default function UserManagement() {
                     )}
                   </td>
                   <td>
-                    {canEdit ? (
-                      <select value={u.teamId || ""} onChange={(e) => handleLinkTeam(u, e.target.value)}>
-                        <option value="">-- not linked --</option>
-                        {data.team.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
-                      </select>
+                    {canEdit || (u.uid === user?.uid && isSuperRole(u.role)) ? (
+                      <button className={`btnSmall ${u.teamId ? "" : "btnSolid"}`} onClick={() => setLinking(u)}>
+                        🔗 {u.teamId ? (teamName(u.teamId) || "Linked") : "Link karein"}
+                      </button>
                     ) : (teamName(u.teamId) || "—")}
                   </td>
                   <td><span className={`badge ${u.disabled ? "bad" : "ok"}`}>{u.disabled ? "Disabled" : "Active"}</span></td>
@@ -270,6 +271,8 @@ export default function UserManagement() {
           </tbody>
         </table>
       </div>
+
+      {linking && <LinkTeamModal account={linking} onClose={() => setLinking(null)} onLinked={() => loadUsers()} />}
 
       {editing && (
         <div className="dtModalBackdrop" onClick={() => setEditing(null)}>

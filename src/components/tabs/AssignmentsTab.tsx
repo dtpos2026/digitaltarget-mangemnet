@@ -6,12 +6,14 @@ import { saveElementAsImage } from "@/lib/exportUtils";
 import ModuleInsights from "@/components/ModuleInsights";
 import { activeOnly } from "@/lib/closing";
 import { suggestAssignee } from "@/lib/assignAI";
+import { useInlineAI } from "@/lib/inlineAI";
 
 const STATUS_OPTIONS = ["Assigned", "In Progress", "Submitted", "Revision", "Completed", "Cancelled"];
 
 export default function AssignmentsTab() {
   const { data, addItem, updateItem, removeItem } = useData();
   const { user, roleDoc } = useAuth();
+  const inlineAI = useInlineAI();
 
   const [memberId, setMemberId] = useState("");
   const [title, setTitle] = useState("");
@@ -117,7 +119,7 @@ export default function AssignmentsTab() {
             </select>
           </div>
         </div>
-        {aiPick && (
+        {inlineAI && aiPick && (
           <div className="assignAI">
             <div className="lpHead">✨ AI suggestion</div>
             <div><b>{aiPick.who === "self" ? "Ye kaam aap khud karein" : `${aiPick.memberName} ko dein`}</b></div>

@@ -5,6 +5,7 @@ import { useData } from "@/contexts/DataContext";
 import { analyzeModule, ModuleKey } from "@/lib/moduleInsights";
 import { MODULE_LABEL, useGrowthTasks } from "@/lib/growthTasks";
 import type { Severity } from "@/lib/insights";
+import { useInlineAI } from "@/lib/inlineAI";
 
 const SEV: Record<Severity, { label: string; Icon: typeof Info }> = {
   risk: { label: "Urgent", Icon: ShieldAlert },
@@ -19,7 +20,8 @@ const openKey = (m: string) => `dt.insights.${m}`;
  * "AI Growth Analysis" card at the top of a module: key numbers, what is
  * growing or stuck, and one-click Growth Tasks from each suggested action.
  */
-export default function ModuleInsights({ module, limit = 4 }: { module: ModuleKey; limit?: number }) {
+export default function ModuleInsights({ module, limit = 4, force = false }: { module: ModuleKey; limit?: number; force?: boolean }) {
+  const inline = useInlineAI();
   const { can, hasFullAccess } = useAuth();
   const { data } = useData();
   const tasks = useGrowthTasks();
@@ -27,6 +29,8 @@ export default function ModuleInsights({ module, limit = 4 }: { module: ModuleKe
   const [all, setAll] = useState(false);
   const [msg, setMsg] = useState("");
   const a = useMemo(() => analyzeModule(module, data), [module, data]);
+  // AI analysis lives in the AI Analysis tab; other pages show it only when switched on.
+  if (!force && !inline) return null;
   if (!(hasFullAccess || can("reports.view"))) return null;
   const canTask = hasFullAccess || can("settings.manage");
   // Dismissed suggestions never come back.
