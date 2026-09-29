@@ -211,67 +211,101 @@ export function InvoiceA4({ inv, client, project, settings, qr }: Props) {
   );
 }
 
-export function InvoicePOS({ inv, client, project, settings, qr }: Props) {
+/** Thermal printer settings. Side margins are inside the paper width, so they can be tuned per printer. */
+export interface PosOptions {
+  width: 58 | 80;
+  /** Left / right padding in mm (printers differ in how much they cut off). */
+  margin: number;
+  /** Text size multiplier: 0.9 small, 1 normal, 1.15 large. */
+  scale: number;
+  /** "receipt" = full bill; "token" = short slip you can hand to the client. */
+  variant: "receipt" | "token";
+}
+export const DEFAULT_POS: PosOptions = { width: 80, margin: 3, scale: 1, variant: "receipt" };
+
+export function InvoicePOS({ inv, client, project, settings, qr, pos }: Props & { pos?: PosOptions }) {
+  const o = { ...DEFAULT_POS, ...(pos || {}) };
+  const narrow = o.width === 58;
   const v = invoiceView(inv);
   const company = settings?.companyName || "Digital Target";
-  const line: React.CSSProperties = { display: "flex", justifyContent: "space-between", gap: 8 };
-  const dash: React.CSSProperties = { borderTop: "1px dashed #555", margin: "7px 0" };
-  const small: React.CSSProperties = { fontSize: 9.5, color: "#444" };
+  const base = (narrow ? 10 : 11.5) * o.scale;
+  const line: React.CSSProperties = { display: "flex", justifyContent: "space-between", gap: 6, alignItems: "baseline" };
+  const rule = (style: "dashed" | "solid" | "double" = "dashed"): React.CSSProperties => ({ borderTop: `${style === "double" ? 3 : 1}px ${style}  #000`, margin: `${narrow ? 5 : 7}px 0` });
+  const small: React.CSSProperties = { fontSize: base * 0.82, color: "#000" };
   const contact = [settings?.phone, settings?.companyWebsite || settings?.companyEmail].filter(Boolean).join(" • ");
+  const paid = v.status === "Paid";
+  const qrSize = (narrow ? 26 : 32) * 3.78; // mm → px
   return (
-    <div style={{ width: "80mm", padding: "5mm 4.5mm 6mm", background: "#fff", color: "#000", fontFamily: "Inter, 'Segoe UI', Arial, sans-serif", fontSize: 11, lineHeight: 1.45, letterSpacing: 0, boxSizing: "border-box" }}>
+    <div style={{ width: `${o.width}mm`, padding: `4mm ${o.margin}mm 6mm`, background: "#fff", color: "#000", fontFamily: "'Courier New', 'Inter', monospace", fontWeight: 600, fontSize: base, lineHeight: 1.38, boxSizing: "border-box" }}>
       <div style={{ textAlign: "center" }}>
         {settings?.logo?.data
-          ? <img src={settings.logo.data} alt="logo" style={{ maxWidth: "40mm", maxHeight: "16mm", objectFit: "contain" }} />
-          : <div style={{ display: "flex", margin: "0 auto", width: 38, height: 38, borderRadius: 10, background: BRAND, alignItems: "center", justifyContent: "center", WebkitPrintColorAdjust: "exact", printColorAdjust: "exact" } as React.CSSProperties}><Mark size={24} color="#fff" /></div>}
-        <div style={{ fontWeight: 900, fontSize: 14, letterSpacing: 1.5, marginTop: 4, textTransform: "uppercase" }}>{company}</div>
-        <div style={{ ...small, fontWeight: 600 }}>AI Software • Digital Marketing • Social Media</div>
+          ? <img src={settings.logo.data} alt="logo" style={{ maxWidth: `${o.width - 2 * o.margin - 16}mm`, maxHeight: "16mm", objectFit: "contain", filter: "grayscale(1) contrast(1.4)" }} />
+          : <div style={{ display: "flex", margin: "0 auto", width: 34, height: 34, alignItems: "center", justifyContent: "center" }}><Mark size={30} color="#000" /></div>}
+        <div style={{ fontWeight: 900, fontSize: base * 1.3, letterSpacing: 1, marginTop: 3, textTransform: "uppercase" }}>{company}</div>
+        {!narrow && <div style={small}>AI Software • Digital Marketing • Social Media</div>}
         {settings?.companyAddress && <div style={small}>{settings.companyAddress}</div>}
         {contact && <div style={small}>{contact}</div>}
       </div>
-      <div style={{ margin: "8px 0 6px", background: BRAND, color: "#fff", textAlign: "center", fontWeight: 800, letterSpacing: 2, fontSize: 11, padding: "4px 0", borderRadius: 4, WebkitPrintColorAdjust: "exact", printColorAdjust: "exact" } as React.CSSProperties}>
-        {v.status === "Paid" ? "PAYMENT RECEIPT" : "INVOICE"}
+      <div style={rule("double")} />
+      <div style={{ textAlign: "center", fontWeight: 900, letterSpacing: 3, fontSize: base * 1.15 }}>
+        {o.variant === "token" ? (paid ? "PAID SLIP" : "PAYMENT TOKEN") : paid ? "PAYMENT RECEIPT" : "INVOICE"}
       </div>
-      <div>
-        <div style={line}><span>Invoice #</span><b>{v.number}</b></div>
-        <div style={line}><span>Date</span><span>{v.date}</span></div>
-        {inv.dueDate && v.due > 0 && <div style={line}><span>Due date</span><span>{inv.dueDate}</span></div>}
-        <div style={line}><span>Client</span><b style={{ textAlign: "right" }}>{client?.name || ""}</b></div>
-        {client?.phone && <div style={line}><span>Phone</span><span>{client.phone}</span></div>}
-        {project?.title && <div style={line}><span>Project</span><span style={{ textAlign: "right" }}>{project.title}</span></div>}
-        {inv.category && <div style={line}><span>Category</span><span style={{ textAlign: "right" }}>{inv.category}</span></div>}
-        {inv.packageName && <div style={line}><span>Package</span><span style={{ textAlign: "right" }}>{inv.packageName}</span></div>}
-        {inv.startDate && inv.endDate && <div style={line}><span>Period</span><span>{inv.startDate} → {inv.endDate}</span></div>}
-      </div>
-      <div style={dash} />
-      <div style={{ ...line, fontSize: 9.5, fontWeight: 800, letterSpacing: 0.8, textTransform: "uppercase" }}><span>Item</span><span>Amount</span></div>
-      <div style={{ borderTop: "1px solid #000", margin: "3px 0 4px" }} />
-      {v.items.map((it, i) => (
-        <div key={i} style={{ padding: "2px 0 4px" }}>
-          <div style={{ fontWeight: 700 }}>{it.desc}</div>
-          <div style={line}><span style={{ color: "#444" }}>{it.qty} × Rs {fmtMoney(it.price)}</span><b>{fmtMoney(it.total)}</b></div>
-        </div>
-      ))}
-      <div style={dash} />
-      <div style={line}><span>Subtotal</span><span>{fmtMoney(v.subtotal)}</span></div>
-      {v.discountAmount > 0 && <div style={line}><span>{v.discountLabel}</span><span>-{fmtMoney(v.discountAmount)}</span></div>}
-      {v.taxAmount > 0 && <div style={line}><span>Tax ({v.taxRate}%)</span><span>{fmtMoney(v.taxAmount)}</span></div>}
-      <div style={{ ...line, border: "2px solid #000", padding: "5px 6px", borderRadius: 4, margin: "6px 0", fontSize: 14, fontWeight: 900 }}><span>TOTAL</span><span>Rs {fmtMoney(v.grandTotal)}</span></div>
-      <div style={line}><span>Paid{inv.paymentMethod ? ` (${inv.paymentMethod})` : ""}</span><span>{fmtMoney(v.paid)}</span></div>
-      <div style={{ ...line, fontWeight: 800 }}><span>Balance</span><span>Rs {fmtMoney(v.due)}</span></div>
-      <div style={{ textAlign: "center", margin: "7px 0 2px" }}>
-        <span style={{ display: "inline-block", border: "1.5px solid #000", borderRadius: 999, padding: "1px 10px", fontWeight: 800, fontSize: 10, letterSpacing: 1 }}>{v.status.toUpperCase()}</span>
+      <div style={rule()} />
+
+      {o.variant === "token" ? (
+        <>
+          <div style={line}><span>No.</span><b>{v.number}</b></div>
+          <div style={line}><span>Date</span><span>{v.date}</span></div>
+          <div style={line}><span>Client</span><b style={{ textAlign: "right" }}>{client?.name || ""}</b></div>
+          {(inv.packageName || inv.category) && <div style={line}><span>Service</span><span style={{ textAlign: "right" }}>{inv.packageName || inv.category}</span></div>}
+          {inv.startDate && inv.endDate && <div style={line}><span>Period</span><span>{inv.startDate} → {inv.endDate}</span></div>}
+          <div style={rule()} />
+          <div style={line}><span>Total</span><b>Rs {fmtMoney(v.grandTotal)}</b></div>
+          <div style={{ ...line, fontSize: base * 1.25, fontWeight: 900 }}><span>{paid ? "PAID" : "Received"}</span><span>Rs {fmtMoney(v.paid)}</span></div>
+          <div style={{ ...line, fontWeight: 900 }}><span>Balance</span><span>Rs {fmtMoney(v.due)}</span></div>
+        </>
+      ) : (
+        <>
+          <div style={line}><span>Invoice #</span><b>{v.number}</b></div>
+          <div style={line}><span>Date</span><span>{v.date}</span></div>
+          {inv.dueDate && v.due > 0 && <div style={line}><span>Due date</span><span>{inv.dueDate}</span></div>}
+          <div style={line}><span>Client</span><b style={{ textAlign: "right" }}>{client?.name || ""}</b></div>
+          {client?.phone && <div style={line}><span>Phone</span><span>{client.phone}</span></div>}
+          {project?.title && <div style={line}><span>Project</span><span style={{ textAlign: "right" }}>{project.title}</span></div>}
+          {inv.packageName && <div style={line}><span>Package</span><span style={{ textAlign: "right" }}>{inv.packageName}</span></div>}
+          {inv.startDate && inv.endDate && <div style={line}><span>Period</span><span>{inv.startDate} → {inv.endDate}</span></div>}
+          <div style={rule()} />
+          <div style={{ ...line, fontSize: base * 0.85, fontWeight: 900, letterSpacing: 1, textTransform: "uppercase" }}><span>Item</span><span>Amount</span></div>
+          <div style={{ borderTop: "1px solid #000", margin: "3px 0 4px" }} />
+          {v.items.map((it, i) => (
+            <div key={i} style={{ padding: "2px 0 4px" }}>
+              <div style={{ fontWeight: 900, wordBreak: "break-word" }}>{it.desc}</div>
+              <div style={line}><span>{it.qty} x {fmtMoney(it.price)}</span><b>{fmtMoney(it.total)}</b></div>
+            </div>
+          ))}
+          <div style={rule()} />
+          <div style={line}><span>Subtotal</span><span>{fmtMoney(v.subtotal)}</span></div>
+          {v.discountAmount > 0 && <div style={line}><span>{v.discountLabel}</span><span>-{fmtMoney(v.discountAmount)}</span></div>}
+          {v.taxAmount > 0 && <div style={line}><span>Tax ({v.taxRate}%)</span><span>{fmtMoney(v.taxAmount)}</span></div>}
+          <div style={{ ...line, border: "2px solid #000", padding: "4px 5px", margin: "6px 0", fontSize: base * 1.25, fontWeight: 900 }}><span>TOTAL</span><span>Rs {fmtMoney(v.grandTotal)}</span></div>
+          <div style={line}><span>Paid{inv.paymentMethod ? ` (${inv.paymentMethod})` : ""}</span><span>{fmtMoney(v.paid)}</span></div>
+          <div style={{ ...line, fontWeight: 900 }}><span>Balance</span><span>Rs {fmtMoney(v.due)}</span></div>
+        </>
+      )}
+
+      <div style={{ textAlign: "center", margin: "8px 0 2px" }}>
+        <span style={{ display: "inline-block", border: "2px solid #000", padding: "1px 12px", fontWeight: 900, fontSize: base * 1.1, letterSpacing: 3 }}>{v.status.toUpperCase()}</span>
       </div>
       {qr && (
         <div style={{ textAlign: "center", marginTop: 6 }}>
-          <img src={qr} alt="Verification QR" style={{ width: 96, height: 96 }} />
-          <div style={{ fontSize: 9, fontWeight: 700 }}>Scan to verify this receipt</div>
+          <img src={qr} alt="Verification QR" style={{ width: qrSize, height: qrSize, imageRendering: "pixelated", filter: "grayscale(1) contrast(4)" }} />
+          <div style={{ fontSize: base * 0.8, fontWeight: 700 }}>Scan to verify</div>
         </div>
       )}
-      <div style={dash} />
-      <div style={{ textAlign: "center", fontWeight: 900, fontSize: 12 }}>Shukriya! Thank you</div>
+      <div style={rule()} />
+      <div style={{ textAlign: "center", fontWeight: 900, fontSize: base * 1.05 }}>Shukriya! Thank you</div>
       <div style={{ textAlign: "center", ...small }}>{settings?.footer || "Aap ki growth, hamara target."}</div>
-      <div style={{ textAlign: "center", fontSize: 8.5, color: "#666", marginTop: 4 }}>Powered by Digital Target Portal</div>
+      <div style={{ textAlign: "center", fontSize: base * 0.7, marginTop: 3 }}>- - - - - - - - - - - -</div>
     </div>
   );
 }

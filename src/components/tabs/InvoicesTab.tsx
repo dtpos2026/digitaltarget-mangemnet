@@ -13,7 +13,7 @@ import {
   lineTotal, nextInvoiceNo, PAYMENT_METHODS, statusClass, endDateFor, durationLabel, daysToEnd, renewalState,
   paymentsOf, paidTotal,
 } from "@/lib/invoice";
-import { InvoiceA4, InvoicePOS } from "@/components/invoices/InvoiceTemplates";
+import { DEFAULT_POS, InvoiceA4, InvoicePOS, PosOptions } from "@/components/invoices/InvoiceTemplates";
 import { newVerifyToken, publishVerification, verifyUrl } from "@/lib/invoiceVerify";
 import { activeServicesOf, DURATIONS, DurationId, isRecurring, linesOf, serviceById } from "@/lib/catalog";
 import WhatsAppComposer from "@/components/WhatsAppComposer";
@@ -72,6 +72,15 @@ export default function InvoicesTab() {
   const [filter, setFilter] = useState("ALL");
   const [previewInv, setPreviewInv] = useState<any>(null);
   const [previewMode, setPreviewMode] = useState<"A4" | "POS">("A4");
+  // Thermal printer setup (remembered in this browser): paper 58/80 mm, side margins, text size, receipt or token.
+  const [pos, setPosState] = useState<PosOptions>(() => {
+    try { return { ...DEFAULT_POS, ...JSON.parse(localStorage.getItem("dt.posOptions") || "{}") }; } catch { return DEFAULT_POS; }
+  });
+  const setPos = (p: Partial<PosOptions>) => setPosState((prev) => {
+    const next = { ...prev, ...p };
+    try { localStorage.setItem("dt.posOptions", JSON.stringify(next)); } catch { /* ignore */ }
+    return next;
+  });
   const [autoQR, setAutoQR] = useState("");
   const [busy, setBusy] = useState(false);
   const printRef = useRef<HTMLDivElement>(null);
@@ -446,7 +455,7 @@ export default function InvoicesTab() {
     if (!printRef.current) return;
     const w = window.open("", "_blank");
     if (!w) return;
-    const size = previewMode === "A4" ? "@page{size:A4;margin:0}" : "@page{size:80mm auto;margin:0}";
+    const size = previewMode === "A4" ? "@page{size:A4;margin:0}" : `@page{size:${pos.width}mm auto;margin:0}html,body{width:${pos.width}mm}`;
     writeSafeDocument(w, `<html><head><title>${invoiceView(previewInv).number}</title><style>body{margin:0;-webkit-print-color-adjust:exact;print-color-adjust:exact}${size}</style></head><body>${printRef.current.innerHTML}</body></html>`);
     setTimeout(() => w.print(), 400);
   };
@@ -466,7 +475,7 @@ export default function InvoicesTab() {
         while (h + y > 297 + 0.5) { y -= 297; pdf.addPage(); pdf.addImage(img, "JPEG", 0, y, w, h); }
         pdf.save(`${invoiceView(previewInv).number}.pdf`);
       } else {
-        const w = 80, h = (canvas.height * w) / canvas.width;
+        const w = pos.width, h = (canvas.height * w) / canvas.width;
         const pdf = new jsPDF({ unit: "mm", format: [w, h] });
         pdf.addImage(img, "JPEG", 0, 0, w, h);
         pdf.save(`${invoiceView(previewInv).number}_receipt.pdf`);
@@ -825,6 +834,26 @@ export default function InvoicesTab() {
                 <button className={`waChip ${previewMode === "A4" ? "active" : ""}`} onClick={() => setPreviewMode("A4")}>A4 Invoice</button>
                 <button className={`waChip ${previewMode === "POS" ? "active" : ""}`} onClick={() => setPreviewMode("POS")}>POS Receipt</button>
               </div>
+              {previewMode === "POS" && (
+                <div className="posSetup">
+                  <div className="segmented">
+                    {([58, 80] as const).map((w) => <button key={w} className={pos.width === w ? "on" : ""} onClick={() => setPos({ width: w, margin: w === 58 ? 2 : 3 })}>{w} mm</button>)}
+                  </div>
+                  <div className="segmented">
+                    <button className={pos.variant === "receipt" ? "on" : ""} onClick={() => setPos({ variant: "receipt" })}>Full bill</button>
+                    <button className={pos.variant === "token" ? "on" : ""} onClick={() => setPos({ variant: "token" })}>Token / Paid slip</button>
+                  </div>
+                  <label className="posField">Left-Right margin
+                    <input type="range" min={0} max={10} step={0.5} value={pos.margin} onChange={(e) => setPos({ margin: Number(e.target.value) })} />
+                    <b>{pos.margin} mm</b>
+                  </label>
+                  <label className="posField">Text
+                    <select value={pos.scale} onChange={(e) => setPos({ scale: Number(e.target.value) })}>
+                      <option value={0.9}>Chhota</option><option value={1}>Normal</option><option value={1.15}>Bara</option>
+                    </select>
+                  </label>
+                </div>
+              )}
               <div className="rowActions">
                 <button className="btnSolid" onClick={downloadPDF} disabled={busy}>{busy ? "…" : "⬇ PDF"}</button>
                 <button className="btnSmall" onClick={printPreview}>🖨 Print</button>
@@ -837,7 +866,7 @@ export default function InvoicesTab() {
               <div ref={printRef}>
                 {previewMode === "A4"
                   ? <InvoiceA4 inv={previewInv} client={clientOf(previewInv.clientId)} project={projectOf(previewInv.projectId)} settings={settings} qr={autoQR} />
-                  : <InvoicePOS inv={previewInv} client={clientOf(previewInv.clientId)} project={projectOf(previewInv.projectId)} settings={settings} qr={autoQR} />}
+                  : <InvoicePOS inv={previewInv} client={clientOf(previewInv.clientId)} project={projectOf(previewInv.projectId)} settings={settings} qr={autoQR} pos={pos} />}
               </div>
             </div>
           </div>
