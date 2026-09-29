@@ -9,15 +9,40 @@
 //  - every message is shown to the user and approved before sending.
 // There is no randomisation, rotation or anything meant to avoid detection.
 import { normalizePhone } from "./phone";
-import { TemplateLang, lineTemplateKey, renderTemplate } from "./waTemplates";
+import { TemplateLang, fillTemplate, lineTemplateKey, renderTemplate } from "./waTemplates";
+import { categoryOfLine } from "./catalog";
 
 export type RecipientStatus = "queued" | "sending" | "sent" | "delivered" | "replied" | "failed" | "skipped";
+
+/**
+ * A picture / video / document sent with the message. The file itself stays
+ * in this browser (IndexedDB, see campaignMedia.ts); only this description is
+ * saved with the campaign.
+ */
+export interface MediaRef {
+  key: string;
+  name: string;
+  type: string; // MIME
+  size: number;
+  kind: "image" | "video" | "file";
+}
+
+/** What one service category receives. Empty fields fall back to the "*" (all categories) entry. */
+export interface CategoryContent {
+  /** Custom message with {name} {service} {company}; empty = the automatic template for the lead's service. */
+  text?: string;
+  link?: string;
+  media?: MediaRef;
+}
+export const ALL_CATEGORIES = "*";
 
 export interface Recipient {
   leadId: string;
   name: string;
   phone: string; // international digits
   line: string;
+  category?: string;
+  media?: MediaRef;
   templateKey: string;
   text: string;
   status: RecipientStatus;
@@ -44,6 +69,8 @@ export interface Campaign {
   lang: TemplateLang;
   templateMode: "auto" | "fixed";
   templateKey: string;
+  /** Per-category message / link / media; "*" applies to every category. */
+  content?: Record<string, CategoryContent>;
   delaySec: number;
   dailyLimit: number;
   startAt?: string; // ISO; sending waits until then
@@ -67,10 +94,35 @@ export const DEFAULTS = { delaySec: 60, dailyLimit: 50 };
 export const clampDelay = (n: number) => Math.max(MIN_DELAY_SEC, Math.round(Number(n) || DEFAULTS.delaySec));
 export const clampDaily = (n: number) => Math.min(MAX_DAILY_LIMIT, Math.max(1, Math.round(Number(n) || DEFAULTS.dailyLimit)));
 
+const TITLES = /^(dr|dr\.|doctor|mr|mr\.|mrs|mrs\.|ms|ms\.|miss|engr|engr\.|eng|prof|prof\.|haji|hajji|sir|madam|ch|ch\.|malik|sheikh)$/i;
 const firstName = (n?: string) => {
   const s = String(n || "").trim();
-  return /^\+?[\d\s()-]{7,}$/.test(s) ? "" : s.split(/\s+/)[0];
+  if (/^\+?[\d\s()-]{7,}$/.test(s)) return "";
+  const parts = s.split(/\s+/).filter(Boolean);
+  // "Dr. Sana Clinic" → "Sana", not "Dr."
+  const first = parts.find((p) => !TITLES.test(p)) || parts[0] || "";
+  return first;
 };
+
+/** The service category of a lead ("Software Development", "Digital Marketing", …), "Other" when unknown. */
+export function categoryOfLead(l: any): string {
+  const line = l.serviceType || l.ai?.line || "";
+  const fromLine = line ? categoryOfLine(line) : "";
+  if (fromLine && fromLine !== "Other") return fromLine;
+  const c = l.ai?.category || l.category || "";
+  return c && c !== "Other" ? c : "Other";
+}
+
+/** Message, link and media for one category (category first, then the "all" entry). */
+export function contentFor(content: Record<string, CategoryContent> | undefined, category: string): CategoryContent {
+  const all = content?.[ALL_CATEGORIES] || {};
+  const own = content?.[category] || {};
+  return {
+    text: own.text?.trim() ? own.text : all.text,
+    link: own.link?.trim() ? own.link : all.link,
+    media: own.media || all.media,
+  };
+}
 
 /**
  * Recipients for the chosen leads. Opted-out, invalid and duplicate numbers
@@ -80,15 +132,22 @@ export function buildRecipients(
   leads: any[],
   optOuts: Set<string>,
   settings: unknown,
-  opts: { lang: TemplateLang; templateMode: "auto" | "fixed"; templateKey: string }
+  opts: { lang: TemplateLang; templateMode: "auto" | "fixed"; templateKey: string; content?: Record<string, CategoryContent> }
 ): Recipient[] {
   const seen = new Set<string>();
   return leads.map((l) => {
     const phone = normalizePhone(l.whatsapp || l.phone || l.phoneE164);
     const line = l.serviceType || l.ai?.line || "";
     const templateKey = opts.templateMode === "auto" ? lineTemplateKey(line) : opts.templateKey;
-    const text = renderTemplate(settings as never, templateKey, opts.lang, { name: firstName(l.name), service: line });
-    const base = { leadId: l.id, name: l.name || phone, phone, line, templateKey, text };
+    const category = categoryOfLead(l);
+    const c = contentFor(opts.content, category);
+    // No known service: "our services" reads better than an empty gap ("following up about .").
+    const vars = { name: firstName(l.name), service: line || (opts.lang === "ur" ? "ہماری سروسز" : "our services"), company: (settings as any)?.companyName || "Digital Target" };
+    // Each lead gets the message of its own category: custom text if the owner wrote one, else the automatic template of its service.
+    let text = c.text?.trim() ? fillTemplate(c.text, vars, opts.lang) : renderTemplate(settings as never, templateKey, opts.lang, vars);
+    const link = (c.link || "").trim();
+    if (link && !text.includes(link)) text = `${text}\n\n${link}`;
+    const base = { leadId: l.id, name: l.name || phone, phone, line, category, templateKey, text, ...(c.media ? { media: c.media } : {}) };
     let reason = "";
     if (!phone) reason = "Number sahi nahi";
     else if (l.optOut || optOuts.has(phone)) reason = "Opt-out — message band karne ko kaha tha";
@@ -163,3 +222,32 @@ export const nextQueued = (c: Campaign) => (c.recipients || []).findIndex((r) =>
 
 /** Paused by a safety rule (not by the user): shown as a dashboard alert. */
 export const needsAttention = (c: Campaign) => c.status === "paused" && !!c.pausedReason && c.pausedReason !== "User ne pause kiya";
+
+/** Recipients grouped by category, for the preview. */
+export function groupByCategory(recipients: Recipient[]) {
+  const m = new Map<string, { category: string; total: number; queued: number }>();
+  for (const r of recipients) {
+    const k = r.category || "Other";
+    const e = m.get(k) || { category: k, total: 0, queued: 0 };
+    e.total++; if (r.status === "queued") e.queued++;
+    m.set(k, e);
+  }
+  return [...m.values()].sort((a, b) => b.total - a.total);
+}
+
+const today_ = () => new Date().toISOString().slice(0, 10);
+
+/**
+ * Why a campaign cannot be deleted right now, or "" when it can. The daily
+ * message cap is counted from the campaigns' send times, so a campaign that
+ * sent something today stays until tomorrow (deleting it would reset the cap).
+ */
+export function deleteBlocker(c: Campaign, today = today_()): string {
+  if (c.status === "running") return "Chal rahi campaign delete nahi hoti — pehle Pause / Stop karein.";
+  if ((c.recipients || []).some((r) => r.sentAt && dayOf(r.sentAt) === today)) return "Aaj is campaign se messages gaye hain — rozana limit ka hisab is se juda hai, kal delete kar sakte hain.";
+  return "";
+}
+
+/** Finished campaigns that can be cleared in one go. */
+export const clearable = (list: Campaign[], today = today_()) =>
+  list.filter((c) => ["completed", "stopped"].includes(c.status) && !deleteBlocker(c, today));

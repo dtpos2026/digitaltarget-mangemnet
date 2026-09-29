@@ -1,14 +1,16 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { collection, doc, getDocs, limit, onSnapshot, orderBy, query, setDoc } from "firebase/firestore";
+import { collection, deleteDoc, doc, getDocs, limit, onSnapshot, orderBy, query, setDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/contexts/AuthContext";
 import { useData } from "@/contexts/DataContext";
 import { todayISO, uid } from "@/lib/db";
 import { formatLocalPhone } from "@/lib/phone";
 import {
-  Campaign, CampaignAlert, DEFAULTS, MAX_DAILY_LIMIT, MIN_DELAY_SEC, Recipient, buildRecipients, campaignStats,
-  clampDaily, clampDelay, nextQueued, safetyCheck, sentToday,
+  ALL_CATEGORIES, Campaign, CampaignAlert, CategoryContent, DEFAULTS, MAX_DAILY_LIMIT, MIN_DELAY_SEC, Recipient, buildRecipients, campaignStats,
+  categoryOfLead, clampDaily, clampDelay, clearable, contentFor, deleteBlocker, groupByCategory, nextQueued, safetyCheck, sentToday,
 } from "@/lib/campaign";
+import { MEDIA_ACCEPT, blobToDataUrl, checkMedia, deleteCampaignMedia, loadMedia, saveMedia } from "@/lib/campaignMedia";
+import { categoriesOf } from "@/lib/catalog";
 import { LANGS, OPT_OUT_RE, TEMPLATE_TYPES, TemplateLang } from "@/lib/waTemplates";
 import { analyzeLead, applyAnalysis, conversationOf, withHistory } from "@/lib/leadAnalysis";
 import { extensionVersion, waExt } from "@/lib/waExtension";
@@ -38,7 +40,11 @@ export default function MessageCenter({ preselect }: { preselect?: { ids: string
   const [startAt, setStartAt] = useState("");
   const [consent, setConsent] = useState(false);
   const [edits, setEdits] = useState<Record<string, string>>({});
-  const [pick, setPick] = useState({ status: "ALL", service: "ALL", days: "15" });
+  const [pick, setPick] = useState({ status: "ALL", service: "ALL", category: "ALL", days: "15" });
+  // Message / link / media per service category ("*" = every category).
+  const [content, setContent] = useState<Record<string, CategoryContent>>({});
+  const [catTab, setCatTab] = useState<string>(ALL_CATEGORIES);
+  const [previews, setPreviews] = useState<Record<string, string>>({});
   const [note, setNote] = useState("");
   const running = useRef<{ id: string; nextAt: number; busy: boolean } | null>(null);
   const campaignsRef = useRef<Campaign[]>([]);
@@ -67,8 +73,10 @@ export default function MessageCenter({ preselect }: { preselect?: { ids: string
 
   const leadsById = useMemo(() => new Map(data.leads.map((l: any) => [l.id, l])), [data.leads]);
   const draftLeads = leadIds.map((id) => leadsById.get(id)).filter(Boolean);
-  const recipients = useMemo(() => buildRecipients(draftLeads, optOuts, data.settings, { lang, templateMode: mode, templateKey })
-    .map((r) => (edits[r.leadId] ? { ...r, text: edits[r.leadId] } : r)), [draftLeads, optOuts, data.settings, lang, mode, templateKey, edits]);
+  const recipients = useMemo(() => buildRecipients(draftLeads, optOuts, data.settings, { lang, templateMode: mode, templateKey, content })
+    .map((r) => (edits[r.leadId] ? { ...r, text: edits[r.leadId] } : r)), [draftLeads, optOuts, data.settings, lang, mode, templateKey, edits, content]);
+  const groups = useMemo(() => groupByCategory(recipients), [recipients]);
+  const allCategories = useMemo(() => categoriesOf(data.settings), [data.settings]);
   const queued = recipients.filter((r) => r.status === "queued").length;
   const used = sentToday(campaigns);
 
@@ -76,8 +84,25 @@ export default function MessageCenter({ preselect }: { preselect?: { ids: string
     const since = new Date(Date.now() - Number(pick.days) * 864e5).toISOString().slice(0, 10);
     const ids = data.leads.filter((l: any) =>
       (pick.status === "ALL" || l.status === pick.status) && (pick.service === "ALL" || (l.serviceType || l.ai?.line) === pick.service)
+      && (pick.category === "ALL" || categoryOfLead(l) === pick.category)
       && String(l.date || l.createdAt || "").slice(0, 10) >= since).map((l: any) => l.id);
     setLeadIds(Array.from(new Set([...leadIds, ...ids])));
+  };
+
+  const setCat = (cat: string, patch: Partial<CategoryContent>) => setContent((p) => ({ ...p, [cat]: { ...(p[cat] || {}), ...patch } }));
+  const pickMedia = async (cat: string, f?: File | null) => {
+    if (!f) return;
+    const bad = checkMedia(f);
+    if (bad) { setNote(bad); return; }
+    const ref = await saveMedia(`draft:${cat}`, f);
+    setCat(cat, { media: ref });
+    if (f.type.startsWith("image/")) setPreviews((p) => ({ ...p, [cat]: URL.createObjectURL(f) }));
+    else setPreviews((p) => { const { [cat]: _x, ...rest } = p; return rest; });
+    setEdits({});
+  };
+  const dropMedia = (cat: string) => {
+    setContent((p) => { const c = { ...(p[cat] || {}) }; delete c.media; return { ...p, [cat]: c }; });
+    setPreviews((p) => { const { [cat]: _x, ...rest } = p; return rest; });
   };
 
   // ---------------------------------------------------------------- runner
@@ -115,9 +140,17 @@ export default function MessageCenter({ preselect }: { preselect?: { ids: string
         await save({ ...c, recipients: recipients_, heartbeatAt: new Date().toISOString() });
         return;
       }
+      let dataUrl = "";
+      if (rec.media) {
+        if (mode_ === "dom") return void (await alertAndPause(c, { at: new Date().toISOString(), type: "provider", text: "Screen mode mein photo / video portal se nahi ja sakti — link use karein ya extension ka Fast mode chalayein." }));
+        const blob = await loadMedia(rec.media.key);
+        if (!blob) return void (await alertAndPause(c, { at: new Date().toISOString(), type: "unusual", text: `File "${rec.media.name}" is browser mein nahi mili (dusra computer ya browser data saaf hua). Isi computer par resume karein ya nayi campaign banayein.` }));
+        dataUrl = await blobToDataUrl(blob);
+      }
       let result: Recipient;
       try {
-        await waExt.sendText({ phone: rec.phone, text: rec.text });
+        if (rec.media) await waExt.sendFile({ phone: rec.phone, dataUrl, filename: rec.media.name, caption: rec.text });
+        else await waExt.sendText({ phone: rec.phone, text: rec.text });
         result = { ...rec, status: "sent", sentAt: new Date().toISOString(), reason: "" };
       } catch (e) {
         result = { ...rec, status: "failed", reason: String((e as Error).message || e).slice(0, 120), sentAt: new Date().toISOString() };
@@ -148,15 +181,29 @@ export default function MessageCenter({ preselect }: { preselect?: { ids: string
     if (!queued) { setNote("Bhejne ke liye koi valid lead nahi."); return; }
     if (!extensionVersion()) { setNote("Digital Target WhatsApp extension install / link karein."); return; }
     if (!confirm(`${queued} messages bhejne hain — har ${clampDelay(delaySec)} second baad ek, aaj ki limit ${clampDaily(dailyLimit)}.\n\nMessages approve hain? Start karein?`)) return;
+    const id = uid("CMP");
+    // Move the picked files under this campaign's own keys and use those in the saved content / recipients.
+    const finalContent: Record<string, CategoryContent> = {};
+    for (const [cat, cc] of Object.entries(content)) {
+      const next: CategoryContent = { ...cc };
+      if (cc.media) {
+        const blob = await loadMedia(cc.media.key);
+        if (!blob) { setNote(`"${cc.media.name}" file nahi mili — dobara select karein.`); return; }
+        next.media = await saveMedia(`${id}:${cat}`, new File([blob], cc.media.name, { type: cc.media.type }));
+      }
+      finalContent[cat] = next;
+    }
+    const finalRecipients = buildRecipients(draftLeads, optOuts, data.settings, { lang, templateMode: mode, templateKey, content: finalContent })
+      .map((r) => (edits[r.leadId] ? { ...r, text: edits[r.leadId] } : r));
     const c: Campaign = {
-      id: uid("CMP"), name: name.trim() || `Campaign ${todayISO()}`, status: "running", lang, templateMode: mode, templateKey,
+      id, name: name.trim() || `Campaign ${todayISO()}`, status: "running", lang, templateMode: mode, templateKey, content: finalContent,
       delaySec: clampDelay(delaySec), dailyLimit: clampDaily(dailyLimit), startAt: startAt ? new Date(startAt).toISOString() : "",
-      consent: true, recipients, alerts: [], createdAt: new Date().toISOString(), createdBy: user?.email || "", startedAt: new Date().toISOString(),
+      consent: true, recipients: finalRecipients, alerts: [], createdAt: new Date().toISOString(), createdBy: user?.email || "", startedAt: new Date().toISOString(),
     };
     await setDoc(doc(col(), c.id), clean(c));
     setCampaigns((p) => [c, ...p]);
     running.current = { id: c.id, nextAt: Date.now(), busy: false };
-    setActiveId(c.id); setLeadIds([]); setEdits({}); setConsent(false); setNote("▶ Campaign shuru — ye tab khula rakhein.");
+    setActiveId(c.id); setLeadIds([]); setEdits({}); setConsent(false); setContent({}); setPreviews({}); setCatTab(ALL_CATEGORIES); setNote("▶ Campaign shuru — ye tab khula rakhein.");
   };
   const pause = async (c: Campaign) => { if (running.current?.id === c.id) running.current = null; await save({ ...c, status: "paused", pausedReason: "User ne pause kiya" }); };
   const resume = async (c: Campaign) => {
@@ -168,6 +215,31 @@ export default function MessageCenter({ preselect }: { preselect?: { ids: string
     if (!confirm("Campaign band karein? Baqi queued messages nahi jayenge.")) return;
     if (running.current?.id === c.id) running.current = null;
     await save({ ...c, status: "stopped", finishedAt: new Date().toISOString(), recipients: c.recipients.map((r) => (r.status === "queued" ? { ...r, status: "skipped" as const, reason: "Campaign stop" } : r)) });
+  };
+
+  const removeCampaign = async (c: Campaign) => {
+    const why = deleteBlocker(c);
+    if (why) { setNote(why); return; }
+    if (!confirm(`"${c.name}" campaign hamesha ke liye delete karein?\n\nIs ki recipients list, status aur replies ka record database se hat jayega (wapas nahi aayega).\nLeads, unki history aur opt-out list safe rehti hain.`)) return;
+    try {
+      await deleteDoc(doc(col(), c.id));
+      await deleteCampaignMedia(c.id);
+      setCampaigns((p) => p.filter((x) => x.id !== c.id));
+      if (activeId === c.id) setActiveId(null);
+      setNote("✓ Campaign delete ho gayi");
+    } catch (e) { setNote("Delete nahi hui: " + (e as Error).message); }
+  };
+  const clearFinished = async () => {
+    const list = clearable(campaigns);
+    if (!list.length) return;
+    if (!confirm(`${list.length} mukammal / band campaigns delete karein?\n\n${list.slice(0, 8).map((c) => "• " + c.name).join("\n")}${list.length > 8 ? "\n…" : ""}\n\nUn ka record database se hat jayega (wapas nahi aayega). Leads aur opt-out list safe rehti hain.`)) return;
+    const gone = new Set<string>();
+    for (const c of list) {
+      try { await deleteDoc(doc(col(), c.id)); await deleteCampaignMedia(c.id); gone.add(c.id); } catch { /* keep going */ }
+    }
+    setCampaigns((p) => p.filter((x) => !gone.has(x.id)));
+    if (activeId && gone.has(activeId)) setActiveId(null);
+    setNote(`✓ ${gone.size} campaigns delete ho gayi${gone.size < list.length ? ` (${list.length - gone.size} nahi hui)` : ""}`);
   };
 
   /** Reads WhatsApp for replies / delivery ticks, re-analyses the lead, records opt-outs. */
@@ -264,6 +336,11 @@ export default function MessageCenter({ preselect }: { preselect?: { ids: string
             <option value="ALL">Sab services</option>
             {Array.from(new Set(data.leads.map((l: any) => l.serviceType || l.ai?.line).filter(Boolean))).map((s: any) => <option key={s}>{s}</option>)}
           </select>
+          <select value={pick.category} onChange={(e) => setPick({ ...pick, category: e.target.value })} aria-label="Category">
+            <option value="ALL">Sab categories</option>
+            {allCategories.map((c) => <option key={c}>{c}</option>)}
+            <option value="Other">Other</option>
+          </select>
           <select value={pick.days} onChange={(e) => setPick({ ...pick, days: e.target.value })} aria-label="Days">
             {["3", "7", "15", "30", "90"].map((d) => <option key={d} value={d}>Pichle {d} din</option>)}
           </select>
@@ -286,6 +363,48 @@ export default function MessageCenter({ preselect }: { preselect?: { ids: string
           <div><label>Schedule (optional)</label><input type="datetime-local" value={startAt} onChange={(e) => setStartAt(e.target.value)} /></div>
         </div>
 
+        {groups.length > 0 && (
+          <div className="mcContent">
+            <label>Category-wise message, link aur photo / video</label>
+            <div className="small">Har lead ko us ki apni category ka message milta hai (khali chhorein to us ki service ka automatic message). Har category ke liye alag text, link aur photo / video laga sakte hain.</div>
+            <div className="segmented mcCatTabs">
+              {[{ category: ALL_CATEGORIES, total: recipients.length, queued: queued }, ...groups].map((g) => (
+                <button key={g.category} className={catTab === g.category ? "on" : ""} onClick={() => setCatTab(g.category)}>
+                  {g.category === ALL_CATEGORIES ? "Sab" : g.category} ({g.total})
+                  {g.category !== ALL_CATEGORIES && (content[g.category]?.media || content[g.category]?.text || content[g.category]?.link) ? " ✎" : ""}
+                </button>
+              ))}
+            </div>
+            {(() => {
+              const cur = content[catTab] || {};
+              const inherited = catTab !== ALL_CATEGORIES ? contentFor(content, catTab) : cur;
+              const media = cur.media;
+              return (
+                <div className="mcCatBody">
+                  <label>Message {catTab === ALL_CATEGORIES ? "(sab categories ke liye)" : `(${catTab})`} — khali = automatic</label>
+                  <textarea rows={4} value={cur.text || ""} dir={lang === "ur" ? "rtl" : "ltr"} placeholder="Assalam o Alaikum {name}! {service} ke baare mein…   ({name} {service} {company} khud bhar jate hain)" onChange={(e) => { setCat(catTab, { text: e.target.value }); setEdits({}); }} />
+                  <label>Link (website, YouTube, Google Drive…)</label>
+                  <input value={cur.link || ""} placeholder={inherited.link && catTab !== ALL_CATEGORIES ? `Sab wala: ${inherited.link}` : "https://…"} onChange={(e) => { setCat(catTab, { link: e.target.value.trim() }); setEdits({}); }} />
+                  <label>Photo / video / PDF (max 16 MB)</label>
+                  {media ? (
+                    <div className="mcMedia">
+                      {previews[catTab] && <img src={previews[catTab]} alt="" />}
+                      <div><b>{media.kind === "image" ? "🖼" : media.kind === "video" ? "🎬" : "📄"} {media.name}</b><div className="small">{(media.size / 1024 / 1024).toFixed(2)} MB • message is ke saath caption ban kar jayega</div></div>
+                      <button className="btnSmall" onClick={() => dropMedia(catTab)}>✕ Hatayein</button>
+                    </div>
+                  ) : (
+                    <>
+                      <input type="file" accept={MEDIA_ACCEPT} onChange={(e) => { pickMedia(catTab, e.target.files?.[0]); e.target.value = ""; }} />
+                      {catTab !== ALL_CATEGORIES && inherited.media && <div className="small">Is category ki apni file nahi — "Sab" wali file jayegi: {inherited.media.name}</div>}
+                    </>
+                  )}
+                  <div className="small">Photo / video ke liye extension ka Fast mode chahiye; badi video ke bajaye uska link dein. File isi computer ke browser mein rehti hai — campaign isi computer se chalayein.</div>
+                </div>
+              );
+            })()}
+          </div>
+        )}
+
         {recipients.length > 0 && (
           <div className="mcPreview">
             <div className="small"><b>{queued}</b> bhejne ke liye • {recipients.length - queued} skip • message par click kar ke edit karein</div>
@@ -293,7 +412,8 @@ export default function MessageCenter({ preselect }: { preselect?: { ids: string
               <details key={r.leadId} className={`mcRec ${r.status}`}>
                 <summary>
                   <b>{r.name}</b> <span className="small">{formatLocalPhone(r.phone) || "—"}</span>
-                  <span className={`badge ${r.status === "skipped" ? "bad" : ""}`}>{r.status === "skipped" ? `Skip: ${r.reason}` : r.line || "General"}</span>
+                  <span className={`badge ${r.status === "skipped" ? "bad" : ""}`}>{r.status === "skipped" ? `Skip: ${r.reason}` : `${r.category || "Other"}${r.line ? ` • ${r.line}` : ""}`}</span>
+                  {r.media && r.status !== "skipped" && <span className="badge ok">{r.media.kind === "image" ? "🖼" : r.media.kind === "video" ? "🎬" : "📄"} {r.media.name.slice(0, 18)}</span>}
                 </summary>
                 {r.status !== "skipped" && (
                   <textarea rows={6} value={r.text} dir={lang === "ur" ? "rtl" : "ltr"} className={lang === "ur" ? "urduText" : ""} onChange={(e) => setEdits({ ...edits, [r.leadId]: e.target.value })} />
@@ -312,7 +432,10 @@ export default function MessageCenter({ preselect }: { preselect?: { ids: string
       </section>
 
       <section className="mcList">
-        <div className="mcHead"><b>Campaigns</b></div>
+        <div className="mcHead">
+          <b>Campaigns</b>
+          {clearable(campaigns).length > 0 && <button className="btnSmall" onClick={clearFinished} title="Mukammal / band campaigns database se hata dein">🧹 Complete wali delete ({clearable(campaigns).length})</button>}
+        </div>
         {campaigns.length === 0 && <div className="small">Abhi koi campaign nahi.</div>}
         {campaigns.map((c) => {
           const s = campaignStats(c, data.leads);
@@ -336,6 +459,7 @@ export default function MessageCenter({ preselect }: { preselect?: { ids: string
                   {active.status === "running" && !stale(active) && <button className="btnSmall" onClick={() => pause(active)}>⏸ Pause</button>}
                   {["running", "paused"].includes(active.status) && <button className="btnDanger" onClick={() => stop(active)}>■ Stop</button>}
                   <button className="btnSmall" onClick={() => checkReplies(active)}>↻ Replies check</button>
+                  <button className="btnDanger" onClick={() => removeCampaign(active)} title={deleteBlocker(active) || "Campaign database se delete karein"}>🗑 Delete</button>
                 </div>
               </div>
               {active.pausedReason && active.status === "paused" && <div className="mcAlert">⚠ {active.pausedReason}</div>}
@@ -345,17 +469,23 @@ export default function MessageCenter({ preselect }: { preselect?: { ids: string
                   <div key={k}><span>{k}</span><b>{v}</b></div>
                 ))}
               </div>
+              {(() => {
+                const cats = groupByCategory(active.recipients);
+                const withMedia = active.recipients.filter((r) => r.media).length;
+                return <div className="small">Categories: {cats.map((g) => `${g.category} (${g.total})`).join(" • ")}{withMedia ? ` • ${withMedia} messages ke saath photo / video` : ""}</div>;
+              })()}
               <div className="small">Delay {active.delaySec}s • daily limit {active.dailyLimit} • {LANGS.find((l) => l.id === active.lang)?.label}{active.startAt ? ` • start ${new Date(active.startAt).toLocaleString()}` : ""}</div>
               {(active.alerts || []).length > 0 && (
                 <div className="mcAlerts">{active.alerts.slice(-5).reverse().map((a, i) => <div key={i} className="small">⚠ {new Date(a.at).toLocaleTimeString()} — {a.text}</div>)}</div>
               )}
               <div className="tablewrap" style={{ maxHeight: 360 }}>
                 <table>
-                  <thead><tr><th>Lead</th><th>Status</th><th>Sent</th><th>Reply</th></tr></thead>
+                  <thead><tr><th>Lead</th><th>Category</th><th>Status</th><th>Sent</th><th>Reply</th></tr></thead>
                   <tbody>
                     {active.recipients.map((r) => (
                       <tr key={r.leadId}>
                         <td><b>{r.name}</b><div className="small">{formatLocalPhone(r.phone)}</div></td>
+                        <td className="small">{r.category || "—"}{r.media ? ` • ${r.media.kind === "image" ? "🖼" : r.media.kind === "video" ? "🎬" : "📄"}` : ""}</td>
                         <td><span className={`badge ${STATUS_CLS[r.status] || ""}`}>{r.status}</span>{r.reason ? <div className="small">{r.reason}</div> : null}{r.optOut ? <div className="badge bad">opt-out</div> : null}</td>
                         <td className="small">{r.sentAt ? new Date(r.sentAt).toLocaleTimeString() : "—"}</td>
                         <td className="small">{r.replyText ? r.replyText.slice(0, 80) : "—"}</td>

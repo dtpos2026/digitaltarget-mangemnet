@@ -361,6 +361,12 @@ describe("monthly closing & history protection", () => {
     await assertSucceeds(setDoc(wsDoc("leadmgr", "optOuts/923001234567"), { phone: "923001234567" }));
     await assertFails(getDocs(collection(db("acct"), `users/${WS}/optOuts`)));
   });
+
+  it("campaign managers can delete campaigns; others cannot", async () => {
+    await assertSucceeds(setDoc(wsDoc("leadmgr", "waCampaigns/D1"), { id: "D1", status: "completed" }));
+    await assertFails(deleteDoc(wsDoc("acct", "waCampaigns/D1")));
+    await assertSucceeds(deleteDoc(wsDoc("leadmgr", "waCampaigns/D1")));
+  });
 });
 
 describe("storage (WhatsApp media)", () => {

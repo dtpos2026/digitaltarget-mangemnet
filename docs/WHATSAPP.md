@@ -84,6 +84,13 @@ Limits:
 
 **"Sorry, something went wrong" inside the portal**: WhatsApp often refuses to load inside another site. The extension now notices that page and the portal switches to the separate window by itself; the left panel keeps working. *Alag window* is the recommended mode.
 
+## Campaigns: category-wise content, photo / video / link, delete
+
+- **Each lead gets the message of its own category.** Pick any leads (or filter by category / service / status / days) — the preview groups them by category (Software Development, Digital Marketing, Creative Services, Development, Other). With no custom text, every lead gets the automatic template of its own service.
+- **Per-category content**: in *Category-wise message, link aur photo / video* choose the *Sab* tab (applies to everyone) or a category tab and set a custom message (`{name} {service} {company}`), a link, and a photo / video / PDF (max 16 MB). A category without its own link or file inherits the *Sab* one. The file is sent as WhatsApp media with the message as caption; the link is added to the message text.
+- The picked file stays in **this browser** (IndexedDB), not in the cloud; the campaign runs only while the portal tab is open anyway. If the file is missing later (other computer / cleared browser) the campaign pauses and says so. Photo / video needs the extension's *Fast mode*; in Screen mode use a link.
+- **Delete**: *Delete* on a campaign removes it (recipients, statuses, replies) from the database; *Complete wali delete* clears every finished / stopped campaign at once. A running campaign, and a campaign that sent messages **today**, cannot be deleted (the daily message limit is counted from these records) — delete it tomorrow. Leads, their history and the opt-out list are never touched.
+
 ## Option 2 — Server (24/7 capture, QR / linked device)
 
 The portal links **0345-1873354** the way WhatsApp Web does: an admin clicks
