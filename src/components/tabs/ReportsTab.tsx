@@ -3,6 +3,7 @@ import { useData } from "@/contexts/DataContext";
 import { todayISO, fmtMoney } from "@/lib/db";
 import { printElementHTML } from "@/lib/exportUtils";
 import { buildBusinessReport, rangeFor } from "@/lib/reports";
+import MarginReport from "@/components/MarginReport";
 
 const rs = (n: number) => `Rs ${fmtMoney(Math.round(Number(n) || 0))}`;
 
@@ -145,6 +146,7 @@ export default function ReportsTab() {
 
   return (
     <>
+    <MarginReport />
     <BusinessReport />
     <section className="card">
       <h2>Reports Engine</h2>

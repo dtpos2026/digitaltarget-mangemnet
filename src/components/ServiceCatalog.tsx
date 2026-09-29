@@ -37,6 +37,7 @@ export default function ServiceCatalog() {
         ...r,
         name: r.name.trim(),
         rate: Number(r.rate) || 0,
+        costPrice: r.costPrice === undefined || r.costPrice === null || String(r.costPrice) === "" ? undefined : Math.max(0, Number(r.costPrice) || 0),
         setupFee: r.pricing === "setup_plus_monthly" ? Number(r.setupFee) || 0 : undefined,
         active: r.active !== false,
       }));
@@ -120,6 +121,10 @@ export default function ServiceCatalog() {
                     <td className="num">
                       <input type="number" min="0" value={r.rate} onChange={(e) => set(r.id, { rate: +e.target.value })} style={{ textAlign: "right" }} />
                       {monthlyValue(r) > 0 && <div className="small">≈ Rs {fmtMoney(monthlyValue(r))}/mo</div>}
+                      <label className="small setupFee" title="Internal — invoice par nahi chhapta">Cost / unit 🔒
+                        <input type="number" min="0" value={r.costPrice ?? ""} placeholder="—" onChange={(e) => set(r.id, { costPrice: e.target.value === "" ? undefined : Math.max(0, +e.target.value) })} />
+                      </label>
+                      {r.costPrice !== undefined && r.rate > 0 && <div className="small">margin {Math.round(((r.rate - r.costPrice) / r.rate) * 100)}%</div>}
                     </td>
                     <td><input value={r.unit || ""} onChange={(e) => set(r.id, { unit: e.target.value })} placeholder="day / month / project" /></td>
                     <td>

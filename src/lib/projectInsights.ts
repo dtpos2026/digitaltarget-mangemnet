@@ -13,7 +13,8 @@ export interface ProjectMetrics {
   due: number;
   cost: number; // linked expenses + team assignment rates
   profit: number; // paid − cost (cash profit so far)
-  expectedProfit: number; // max(budget, billed) − cost
+  expectedProfit: number; // max(budget, billed) − max(expected cost, actual cost)
+  expectedCost: number; // internal estimate entered on the project
   paymentStatus: "No invoice" | "Unpaid" | "Partial" | "Paid";
   tasks: number;
   tasksDone: number;
@@ -41,6 +42,7 @@ export function projectMetrics(p: any, data: any, now = new Date()): ProjectMetr
   const teamCost = assignments.filter((a: any) => !paidByAccounting.has(a.id)).reduce((s: number, a: any) => s + num(a.rate), 0);
   const cost = expenseRows.reduce((s: number, a: any) => s + num(a.amount), 0) + teamCost;
   const budget = num(p.budget);
+  const expectedCost = num(p.expectedCost);
 
   const tasks = assignments.length + schedule.length;
   const tasksDone = assignments.filter((a: any) => DONE_TASK.has(a.status)).length + schedule.filter((s: any) => DONE_TASK.has(s.status)).length;
@@ -59,6 +61,8 @@ export function projectMetrics(p: any, data: any, now = new Date()): ProjectMetr
     nextAction = `Deadline ${Math.abs(daysLeft)} din guzar gayi — client ko nai date batayein ya kaam close karein`; urgency = "high";
   } else if (closed && due > 0) {
     nextAction = `Kaam mukammal — Rs ${Math.round(due).toLocaleString("en-PK")} baqi, payment reminder bhejein`; urgency = "high";
+  } else if (budget > 0 && expectedCost === 0 && cost === 0) {
+    nextAction = "Is project ki expected cost nahi likhi — cost likh dein taake margin pata chale"; urgency = "medium";
   } else if (!invoices.length && budget > 0) {
     nextAction = "Is project ki invoice nahi bani — invoice bana kar advance lein"; urgency = "medium";
   } else if (budget > 0 && cost > budget) {
@@ -75,7 +79,7 @@ export function projectMetrics(p: any, data: any, now = new Date()): ProjectMetr
 
   const top = Math.max(budget, billed);
   return {
-    budget, billed, paid, due, cost, profit: paid - cost, expectedProfit: top - cost, paymentStatus,
+    budget, billed, paid, due, cost, profit: paid - cost, expectedCost, expectedProfit: top - Math.max(expectedCost, cost), paymentStatus,
     tasks, tasksDone, progress, team, daysLeft, nextAction, urgency,
   };
 }

@@ -11,6 +11,11 @@ export interface InvoiceItem {
   qty: number;
   price: number;
   total: number;
+  /**
+   * INTERNAL cost per unit (what this line costs us). Used only for profit /
+   * margin reports — never printed, shared, or put on the public verify page.
+   */
+  costPrice?: number;
 }
 
 export type DiscountType = "amount" | "percent";

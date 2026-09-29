@@ -1088,3 +1088,19 @@ td { font-size: 13.5px; }
 .aiKbRow { display: flex; gap: 10px; align-items: flex-start; border-top: 1px solid var(--border, #ece7f5); padding: 8px 0; }
 .aiDraftText { white-space: pre-wrap; background: rgba(91,33,182,.06); border-radius: 8px; padding: 8px; margin: 4px 0; }
 .waWebWarn { background: rgba(217,119,6,.12); border-radius: 8px; padding: 8px 10px; font-size: 12px; margin: 6px 0; }
+
+/* Internal cost & margin (never printed) */
+.invCost { border: 1px dashed #b7791f; background: rgba(217,119,6,.06); border-radius: 12px; padding: 10px 12px; margin: 10px 0; display: grid; gap: 6px; }
+.invCostHead { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }
+.invCostRow { display: grid; grid-template-columns: minmax(120px, 1fr) 130px auto; gap: 8px; align-items: center; }
+.invCostName { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
+.invCostSum { font-size: 13px; }
+.invCostSum.neg { color: #c0392b; }
+@media (max-width: 640px) { .invCostRow { grid-template-columns: 1fr; } }
+.marginNotes { list-style: none; padding: 0; margin: 4px 0 10px; display: grid; gap: 6px; }
+.marginNotes li { border-left: 4px solid #16A34A; background: rgba(22,163,74,.07); padding: 6px 10px; border-radius: 0 8px 8px 0; font-size: 13px; }
+.marginNotes li.warn { border-color: #D97706; background: rgba(217,119,6,.09); }
+.marginNotes li.bad { border-color: #DC2626; background: rgba(220,38,38,.08); }
+.marginSub td { background: rgba(91,33,182,.04); font-size: 12.5px; }
+.marginReport .lpRow { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; padding: 4px 0; border-bottom: 1px solid var(--border, #ece7f5); }
+.marginReport .lpRow b { white-space: nowrap; }

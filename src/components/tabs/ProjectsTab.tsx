@@ -12,6 +12,7 @@ export default function ProjectsTab() {
   const [title, setTitle] = useState("");
   const [category, setCategory] = useState("Ads Run");
   const [budget, setBudget] = useState("");
+  const [expectedCost, setExpectedCost] = useState("");
   const [start, setStart] = useState("");
   const [end, setEnd] = useState("");
   const [view, setView] = useState<"list"|"calendar"|"timeline">("list");
@@ -25,10 +26,10 @@ export default function ProjectsTab() {
     const startVal = normalizeDT(start || dtLocalNowValue(), "09:00");
     const endVal = normalizeDT(end || "", "18:00");
     await addItem("projects", {
-      id: uid("P"), clientId, title: title.trim(), category, budget: +budget || 0,
+      id: uid("P"), clientId, title: title.trim(), category, budget: +budget || 0, expectedCost: +expectedCost || 0,
       start: startVal, end: endVal, status: "Running",
     });
-    setTitle(""); setBudget(""); setEnd("");
+    setTitle(""); setBudget(""); setExpectedCost(""); setEnd("");
   };
 
   const toggleStatus = async (p: any) => {
@@ -181,6 +182,10 @@ export default function ProjectsTab() {
         <div><label>Budget / Price</label><input type="number" value={budget} onChange={(e) => setBudget(e.target.value)} placeholder="e.g. 15000" /></div>
       </div>
       <div className="grid2">
+        <div><label>Expected cost 🔒 (internal — invoice par nahi)</label><input type="number" min="0" value={expectedCost} onChange={(e) => setExpectedCost(e.target.value)} placeholder="e.g. 6000 (ads spend + team)" /></div>
+        <div className="small" style={{ alignSelf: "end" }}>{+budget > 0 && expectedCost !== "" ? `Expected profit Rs ${fmtMoney((+budget || 0) - (+expectedCost || 0))} (${Math.round((((+budget || 0) - (+expectedCost || 0)) / (+budget || 1)) * 1000) / 10}%)` : "Cost likhne se project ka margin pehle se pata chal jata hai."}</div>
+      </div>
+      <div className="grid2">
         <div><label>Start Date & Time</label><input type="datetime-local" value={start} onChange={(e) => setStart(e.target.value)} /></div>
         <div><label>End Date & Time</label><input type="datetime-local" value={end} onChange={(e) => setEnd(e.target.value)} /></div>
       </div>
@@ -215,6 +220,7 @@ export default function ProjectsTab() {
                     <div>Budget <b>Rs {fmtMoney(m.budget)}</b></div>
                     <div>Received Rs {fmtMoney(m.paid)}{m.due > 0 ? ` • due Rs ${fmtMoney(m.due)}` : ""}</div>
                     <div>Cost Rs {fmtMoney(m.cost)} • Profit <b className={m.profit < 0 ? "neg" : "pos"}>Rs {fmtMoney(m.profit)}</b></div>
+                    {(m.expectedCost > 0 || m.budget > 0) && <div>Expected profit <b className={m.expectedProfit < 0 ? "neg" : "pos"}>Rs {fmtMoney(m.expectedProfit)}</b>{m.expectedCost === 0 && m.cost === 0 ? " (cost baaqi)" : ""}</div>}
                     <span className={`badge ${m.paymentStatus === "Paid" ? "ok" : m.paymentStatus === "No invoice" ? "" : "warn"}`}>{m.paymentStatus}</span>
                   </td>
                   <td className="small" style={{ minWidth: 200 }}>

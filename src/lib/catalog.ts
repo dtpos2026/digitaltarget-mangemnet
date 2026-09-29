@@ -70,6 +70,8 @@ export interface CatalogService {
   /** Business area. Derived from `line` for services saved before categories existed. */
   category?: string;
   rate: number;
+  /** Internal cost per unit (ad spend, freelancer, hosting…). Pre-fills the cost on new invoices; never printed. */
+  costPrice?: number;
   unit?: string;
   /** How it is billed. Defaults to one-time. */
   pricing?: PricingModel;

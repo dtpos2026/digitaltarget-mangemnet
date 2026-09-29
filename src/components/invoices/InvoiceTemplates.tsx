@@ -87,7 +87,11 @@ export function InvoiceA4({ inv, client, project, settings, qr }: Props) {
         </div>
       </div>
 
-      <div style={{ padding: "22px 34px 0", flex: 1 }}>
+      <div style={{ height: 5, background: "linear-gradient(90deg, #16A34A 0%, #5B21B6 100%)" }} />
+      {/* Faint brand mark behind the content */}
+      <img src={markPng(BRAND)} alt="" width={330} height={330} style={{ position: "absolute", right: -40, bottom: 70, opacity: 0.035, pointerEvents: "none" }} />
+
+      <div style={{ padding: "22px 34px 0", flex: 1, position: "relative" }}>
         {/* Parties + meta */}
         <div style={{ display: "grid", gridTemplateColumns: "1.1fr 1.1fr 0.9fr", gap: 18 }}>
           <div>
@@ -192,9 +196,16 @@ export function InvoiceA4({ inv, client, project, settings, qr }: Props) {
       </div>
 
       {/* Footer */}
-      <div style={{ marginTop: 26, background: TINT, borderTop: `3px solid ${BRAND}`, padding: "12px 34px", display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 11, color: MUTED }}>
-        <span style={{ fontWeight: 700, color: BRAND }}>Thank you for your business!</span>
-        <span>{settings?.footer || company}</span>
+      <div style={{ marginTop: 26, background: TINT, borderTop: `3px solid ${BRAND}`, padding: "12px 34px", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 14, fontSize: 11, color: MUTED }}>
+        <span style={{ display: "flex", alignItems: "center", gap: 8, fontWeight: 700, color: BRAND }}>
+          <Mark size={20} color={BRAND} />Thank you for your business!
+        </span>
+        <span style={{ textAlign: "right" }}>
+          <span style={{ fontWeight: 700, color: INK }}>{settings?.footer || company}</span>
+          {[settings?.phone, settings?.companyEmail, settings?.companyWebsite].filter(Boolean).length > 0 && (
+            <span style={{ display: "block" }}>{[settings?.phone, settings?.companyEmail, settings?.companyWebsite].filter(Boolean).join("  •  ")}</span>
+          )}
+        </span>
       </div>
     </div>
   );

@@ -15,6 +15,7 @@ export default function AccountingTab() {
   const [date, setDate] = useState(todayISO());
   const [clientId, setClientId] = useState("");
   const [projectId, setProjectId] = useState("");
+  const [invoiceId, setInvoiceId] = useState("");
   const [category, setCategory] = useState("Invoice Paid");
   const [walletId, setWalletId] = useState("");
   const [amount, setAmount] = useState("");
@@ -41,7 +42,7 @@ export default function AccountingTab() {
 
   const clearForm = () => {
     setEditId(null);
-    setType("IN"); setDate(todayISO()); setClientId(""); setProjectId("");
+    setType("IN"); setDate(todayISO()); setClientId(""); setProjectId(""); setInvoiceId("");
     setCategory("Invoice Paid"); setWalletId(""); setAmount(""); setDesc(""); setScope("business");
   };
 
@@ -63,13 +64,13 @@ export default function AccountingTab() {
       }
       await updateItem("accounting", {
         ...old,
-        date, type, clientId, projectId, category, walletId, amount: amt, desc,
+        date, type, clientId, projectId, invoiceId, category, walletId, amount: amt, desc,
         scope: type === "OUT" ? scope : "",
       });
       alert("Entry updated ✅");
     } else {
       if (walletId && data.wallets.some((x) => x.id === walletId)) await adjustWallet(walletId, signed(type, amt), category);
-      await addItem("accounting", { id: uid("A"), date, type, clientId, projectId, category, walletId, amount: amt, desc, receipt: null, scope: type === "OUT" ? scope : "", createdAt: new Date().toISOString() });
+      await addItem("accounting", { id: uid("A"), date, type, clientId, projectId, invoiceId, category, walletId, amount: amt, desc, receipt: null, scope: type === "OUT" ? scope : "", createdAt: new Date().toISOString() });
     }
     clearForm();
   };
@@ -79,7 +80,7 @@ export default function AccountingTab() {
     setType(a.type || "IN");
     setDate(a.date || todayISO());
     setClientId(a.clientId || "");
-    setProjectId(a.projectId || "");
+    setProjectId(a.projectId || ""); setInvoiceId(a.invoiceId || "");
     setCategory(a.category || "Other");
     setWalletId(a.walletId || "");
     setAmount(String(a.amount || ""));
@@ -136,6 +137,20 @@ export default function AccountingTab() {
           </select>
         </div>
       </div>
+      {type === "OUT" && (
+        <div className="grid2">
+          <div><label>Invoice / sale (margin ke liye)</label>
+            <select value={invoiceId} onChange={(e) => setInvoiceId(e.target.value)}>
+              <option value="">(Optional — kisi sale ka direct kharcha ho to chunein)</option>
+              {data.invoices.slice().sort((a: any, b: any) => String(b.dateISO || "").localeCompare(String(a.dateISO || ""))).slice(0, 200).map((i: any) => {
+                const c = data.clients.find((x) => x.id === i.clientId);
+                return <option key={i.id} value={i.id}>{(i.invoiceNo || i.id) + " — " + (c?.name || "")}</option>;
+              })}
+            </select>
+          </div>
+          <div className="small" style={{ alignSelf: "end" }}>Rent, salary jaisa aam kharcha khali chhor dein (overhead ban jata hai). Ads spend / freelancer ko sale se jorein taake uska margin sahi aaye.</div>
+        </div>
+      )}
       <div className="grid2">
         <div><label>Category</label>
           <select value={category} onChange={(e) => pickCategory(e.target.value)}>

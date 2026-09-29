@@ -68,6 +68,22 @@ Limits:
 - **Replies** are checked every 2 minutes (or with the button). A reply is saved to the lead's conversation, the lead is re-analysed, and opt-outs are recorded.
 - **Analytics per campaign:** selected, sent, delivered, failed, skipped, replies, interested, converted and response %.
 
+## Smart capture, AI reply drafts and exports (extension 1.3.0)
+
+**Capture wizard** (WhatsApp tab → *Capture all chats → leads*): choose filters → *Scan* (nothing is saved) → review → save.
+- Filters: source (Facebook/Instagram Ads or organic), service category, interest level (High / Medium / Low), how old the chats are.
+- Exclusions (so personal data never becomes a lead): groups and channels always; courier / OTP / bank / bill / delivery messages; chats with no business signal; saved contacts (optional); WhatsApp Business accounts (optional); archived chats; chosen labels; and a **"never capture" list** (🚫 button in the review table and on the current chat). Excluded chats can still be added by hand with *Phir bhi shamil karein*.
+- Chats that are excluded because of who they are (saved contact, label, blocklist) are **not opened or read** at all.
+- Ads leads are recognised from Meta's ad metadata (when WhatsApp exposes it) and from typical first messages ("Can I get more info on this?", "aap ka ad dekha"). They are saved with source *Facebook*.
+- WhatsApp Business **labels** ("Hot lead", "Follow up", "Cold") set the interest level; without a label the level is an estimate from the chat.
+- Review table: per chat choose *new lead*, *update the lead we already have*, *link to an existing lead* or *skip*.
+
+**AI reply draft** (current-chat card): drafts a reply from (1) answers you trained, (2) real prices from the Settings catalog, (3) short default replies. It only writes a draft — you press Send. It never sends by itself (unattended replies from a personal WhatsApp break WhatsApp's rules and get numbers banned). Train it in *Settings → AI Reply Training* or from the chat panel (*Is chat se seekhein* turns your earlier replies into answers).
+
+**Exports**: Leads tab → *Excel* (.xlsx with an AI summary sheet) and *PDF* (branded). Selected leads are exported; with none selected, the current filter.
+
+**"Sorry, something went wrong" inside the portal**: WhatsApp often refuses to load inside another site. The extension now notices that page and the portal switches to the separate window by itself; the left panel keeps working. *Alag window* is the recommended mode.
+
 ## Option 2 — Server (24/7 capture, QR / linked device)
 
 The portal links **0345-1873354** the way WhatsApp Web does: an admin clicks

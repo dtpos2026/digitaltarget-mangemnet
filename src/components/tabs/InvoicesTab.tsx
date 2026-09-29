@@ -27,6 +27,8 @@ export default function InvoicesTab() {
   const { data, addItem, removeItem, updateItem, updateSettings, adjustWallet } = useData();
   const { can, workspaceUid, user } = useAuth();
   const canManage = can("invoices.manage");
+  // Internal cost / margin: only people who may see finances. Never printed or shared.
+  const canCost = can("finance.view");
   const settings = data.settings || {};
   const prefix = settings.invoicePrefix || DEFAULT_INVOICE_PREFIX;
 
@@ -150,7 +152,7 @@ export default function InvoicesTab() {
     if (isRecurring(svc)) setTrackRenewal(true);
     const days = periodDays(startDate, end);
     const qty = svc.pricing === "daily" && days ? days : items[idx]?.qty || 1;
-    const main = { ...items[idx], desc: svc.name, price: svc.rate, qty, total: lineTotal(qty, svc.rate), service: svc.id } as InvoiceItem;
+    const main = { ...items[idx], desc: svc.name, price: svc.rate, qty, total: lineTotal(qty, svc.rate), service: svc.id, ...(svc.costPrice !== undefined ? { costPrice: svc.costPrice } : {}) } as InvoiceItem;
     const next = items.map((it, i) => (i === idx ? main : it));
     // Setup + monthly: the one-off setup fee is its own line.
     if (svc.pricing === "setup_plus_monthly" && svc.setupFee) {
@@ -158,6 +160,14 @@ export default function InvoicesTab() {
     }
     setItems(next);
   };
+
+  /** Internal cost per unit; empty = not entered yet. */
+  const setCost = (idx: number, val: string) =>
+    setItems(items.map((it, i) => {
+      if (i !== idx) return it;
+      const { costPrice: _old, ...rest } = it;
+      return val === "" ? rest : { ...rest, costPrice: Math.max(0, Number(val) || 0) };
+    }));
 
   const setItem = (idx: number, field: keyof InvoiceItem, val: string) => {
     const next = items.map((it, i) => {
@@ -188,6 +198,10 @@ export default function InvoicesTab() {
     if (!category) { alert("Service category select karein (e.g. Digital Marketing)"); return; }
     const cleanItems = items.filter((i) => i.desc.trim()).map((i) => ({ ...i, desc: i.desc.trim(), total: lineTotal(i.qty, i.price) }));
     if (!cleanItems.length) { alert("Kam az kam 1 item likhein"); return; }
+    if (canCost) {
+      const noCost = cleanItems.filter((i) => i.costPrice === undefined);
+      if (noCost.length && !confirm(`${noCost.length} item ki internal cost nahi likhi:\n${noCost.map((i) => "• " + i.desc).join("\n")}\n\nCost likhe bina profit / margin galat aayega. Phir bhi save karein?\n(Cancel dabayein aur "Internal cost" wale box mein cost bharein.)`)) return;
+    }
     const t = calcTotals(cleanItems, discountType, discountValue, taxRate);
     const common = {
       clientId, projectId, category, invoiceNo: invoiceNo.trim() || nextInvoiceNo(data.invoices, prefix), items: cleanItems,
@@ -648,6 +662,31 @@ export default function InvoicesTab() {
             ))}
             <button className="btnSmall" onClick={() => setItems([...items, emptyItem()])}>+ Add item</button>
           </div>
+
+          {canCost && (() => {
+            const rows = items.filter((it) => it.desc.trim());
+            const rev = totals.grandTotal - totals.taxAmount;
+            const cost = rows.reduce((s, it) => s + (Number(it.qty) || 0) * (Number(it.costPrice) || 0), 0);
+            const missing = rows.filter((it) => it.costPrice === undefined).length;
+            return (
+              <div className="invCost">
+                <div className="invCostHead"><b>🔒 Internal cost &amp; margin</b><span className="small">Sirf software ke andar — invoice par, PDF / print / WhatsApp / QR mein kahin nahi aata.</span></div>
+                {rows.length === 0 && <div className="small">Pehle item likhein.</div>}
+                {rows.map((it, i) => (
+                  <div className="invCostRow" key={i}>
+                    <span className="invCostName">{it.desc}</span>
+                    <input type="number" min="0" placeholder="cost / unit" value={it.costPrice ?? ""} onChange={(e) => setCost(items.indexOf(it), e.target.value)} aria-label={`Cost per unit of ${it.desc}`} />
+                    <span className="small">× {it.qty} = <b>Rs {fmtMoney((Number(it.qty) || 0) * (Number(it.costPrice) || 0))}</b></span>
+                  </div>
+                ))}
+                <div className={`invCostSum ${rev - cost < 0 ? "neg" : ""}`}>
+                  Sale (tax ke baghair) Rs {fmtMoney(rev)} • Cost Rs {fmtMoney(cost)} • <b>Profit Rs {fmtMoney(rev - cost)}{rev > 0 ? ` (${Math.round(((rev - cost) / rev) * 1000) / 10}%)` : ""}</b>
+                  {missing > 0 && <span className="badge warn" style={{ marginLeft: 8 }}>{missing} item ki cost baaqi</span>}
+                </div>
+                <div className="small">Asal kharcha (ads spend, freelancer) Accounting mein is invoice se link karein — margin dono mein se zyada cost use karta hai.</div>
+              </div>
+            );
+          })()}
 
           <div className="invBottom">
             <div className="grid" style={{ gap: 10 }}>

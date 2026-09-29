@@ -4,7 +4,8 @@ import { db } from "@/lib/firebase";
 import { useAuth } from "@/contexts/AuthContext";
 import { useData } from "@/contexts/DataContext";
 import { fmtMoney, isLateProject, todayISO } from "@/lib/db";
-import { inMonth, monthKey, monthLabel, summarize } from "@/lib/finance";
+import { inMonth, monthEnd, monthKey, monthLabel, monthStart, summarize } from "@/lib/finance";
+import { marginReport } from "@/lib/margin";
 import { invoiceView } from "@/lib/invoice";
 import { targetProgress } from "@/lib/targets";
 import { analyzeBusiness } from "@/lib/insights";
@@ -43,6 +44,8 @@ export default function BusinessOverview() {
   }, [workspaceUid, can]);
 
   const m = useMemo(() => summarize(inMonth(data.accounting, month), data.settings), [data.accounting, data.settings, month]);
+  const mr = useMemo(() => marginReport(data, monthStart(month), monthEnd(month)), [data, month]);
+  const weakest = [...mr.categories].filter((c) => c.revenue > 0 && c.missing === 0).sort((a, b) => a.margin - b.margin)[0];
   const target = useMemo(() => targetProgress(data, month), [data, month]);
 
   // Sales
@@ -112,6 +115,9 @@ export default function BusinessOverview() {
             <div className="ovRow"><span>Total expense</span><b>{rs(m.totalExpense)}</b></div>
             <div className="ovRow"><span>Net profit (business)</span><b className={m.businessProfit < 0 ? "neg" : "pos"}>{rs(m.businessProfit)}</b></div>
             <div className="ovRow"><span>Net saving</span><b className={m.netSaving < 0 ? "neg" : "pos"}>{rs(m.netSaving)} <em>({m.savingMargin}%)</em></b></div>
+            {mr.sales.length > 0 && <div className="ovRow" onClick={() => navigate({ tab: "reports" })} style={{ cursor: "pointer" }}><span>Sales margin</span><b className={mr.grossProfit < 0 ? "neg" : "pos"}>{rs(mr.grossProfit)} <em>({mr.grossMargin}%{mr.missingCost ? "?" : ""})</em></b></div>}
+            {weakest && <div className="ovRow"><span>Kamzor category</span><b className={weakest.margin < 25 ? "warnText" : ""}>{weakest.category} <em>({weakest.margin}%)</em></b></div>}
+            {mr.missingCost > 0 && <div className="ovRow"><span>Cost baaqi wali sales</span><b className="warnText">{mr.missingCost}</b></div>}
           </div>
         )}
         {can("leads.view") && (
