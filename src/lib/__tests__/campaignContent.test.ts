@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ALL_CATEGORIES, Campaign, buildRecipients, categoryOfLead, clearable, contentFor, deleteBlocker, groupByCategory } from "../campaign";
+import { ALL_CATEGORIES, Campaign, buildRecipients, categoryOfLead, clearable, contentFor, deleteBlocker, groupByCategory, sentToday } from "../campaign";
 
 const lead = (id: string, name: string, phone: string, serviceType: string, extra: any = {}) => ({ id, name, phone, serviceType, status: "Interested", ...extra });
 const media = { key: "draft:x", name: "promo.mp4", type: "video/mp4", size: 1000, kind: "video" as const };
@@ -54,14 +54,17 @@ describe("deleting campaigns", () => {
     recipients: sentAt ? [{ leadId: "1", name: "A", phone: "1", line: "", templateKey: "", text: "", status: "sent", sentAt }] : [],
     alerts: [], createdAt: "2026-09-01", createdBy: "",
   });
-  it("blocks running campaigns and ones that sent today (daily cap)", () => {
-    expect(deleteBlocker(camp("running"), "2026-09-29")).toMatch(/Pause/);
-    expect(deleteBlocker(camp("completed", "2026-09-29T09:00:00Z"), "2026-09-29")).toMatch(/kal delete/);
-    expect(deleteBlocker(camp("completed", "2026-09-28T09:00:00Z"), "2026-09-29")).toBe("");
-    expect(deleteBlocker(camp("paused"), "2026-09-29")).toBe("");
+  it("only a running campaign is protected; the daily count survives deletion", () => {
+    expect(deleteBlocker(camp("running"))).toMatch(/Pause/);
+    expect(deleteBlocker(camp("completed", "2026-09-29T09:00:00Z"))).toBe("");
+    expect(deleteBlocker(camp("paused"))).toBe("");
+    // the separate counter keeps today's total even when no campaign is left
+    expect(sentToday([], "2026-09-29", 7)).toBe(7);
+    expect(sentToday([camp("completed", "2026-09-29T09:00:00Z")], "2026-09-29", 0)).toBe(1);
+    expect(sentToday([camp("completed", "2026-09-29T09:00:00Z")], "2026-09-29", 5)).toBe(5);
   });
-  it("clears only finished campaigns", () => {
+  it("clears every finished campaign", () => {
     const list = [camp("completed", "2026-09-20T09:00:00Z"), camp("stopped"), camp("paused"), camp("running"), camp("completed", "2026-09-29T09:00:00Z")];
-    expect(clearable(list, "2026-09-29").map((c) => c.status)).toEqual(["completed", "stopped"]);
+    expect(clearable(list).map((c) => c.status)).toEqual(["completed", "stopped", "completed"]);
   });
 });

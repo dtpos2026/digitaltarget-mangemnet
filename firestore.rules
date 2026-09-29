@@ -68,6 +68,7 @@ service cloud.firestore {
       "targets": ["dashboard.view", "finance.view", "reports.view"],
       "monthlyArchives": ["history.manage"],
       "waCampaigns": ["campaigns.manage"],
+      "waDailyCounts": ["campaigns.manage"],
       "optOuts": ["campaigns.manage", "leads.view", "whatsapp.view"]
     }.get(col, []); }
     function writePerms(col) { return {
@@ -89,6 +90,7 @@ service cloud.firestore {
       "targets": ["finance.manage"],
       "monthlyArchives": ["history.manage"],
       "waCampaigns": ["campaigns.manage"],
+      "waDailyCounts": ["campaigns.manage"],
       "optOuts": ["campaigns.manage", "leads.edit", "whatsapp.reply"]
     }.get(col, []); }
     // GENERATED:END

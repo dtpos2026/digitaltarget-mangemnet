@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { collection, deleteDoc, doc, getDocs, limit, onSnapshot, orderBy, query, setDoc } from "firebase/firestore";
+import { collection, deleteDoc, doc, getDocs, increment, limit, onSnapshot, orderBy, query, setDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/contexts/AuthContext";
 import { useData } from "@/contexts/DataContext";
@@ -49,6 +49,11 @@ export default function MessageCenter({ preselect }: { preselect?: { ids: string
   const running = useRef<{ id: string; nextAt: number; busy: boolean } | null>(null);
   const campaignsRef = useRef<Campaign[]>([]);
   campaignsRef.current = campaigns;
+  // Today's send count lives in its own document so deleting campaigns never resets the daily cap.
+  const [counted, setCounted] = useState(0);
+  const countedRef = useRef(0);
+  countedRef.current = counted;
+  const usedNow = (list: Campaign[]) => sentToday(list, todayISO(), countedRef.current);
 
   const col = useCallback(() => collection(db, "users", workspaceUid!, "waCampaigns"), [workspaceUid]);
   const save = useCallback(async (c: Campaign) => {
@@ -62,8 +67,9 @@ export default function MessageCenter({ preselect }: { preselect?: { ids: string
   useEffect(() => {
     if (!workspaceUid) return;
     const unsub = onSnapshot(query(col(), orderBy("createdAt", "desc"), limit(30)), (snap) => setCampaigns(snap.docs.map((d) => d.data() as Campaign)), () => {});
+    const unsubCount = onSnapshot(doc(db, "users", workspaceUid, "waDailyCounts", todayISO()), (d) => setCounted(Number(d.data()?.sent) || 0), () => {});
     getDocs(collection(db, "users", workspaceUid, "optOuts")).then((s) => setOptOuts(new Set(s.docs.map((d) => d.id)))).catch(() => {});
-    return unsub;
+    return () => { unsub(); unsubCount(); };
   }, [workspaceUid, col]);
 
   // Leads handed over from the Leads tab.
@@ -78,7 +84,7 @@ export default function MessageCenter({ preselect }: { preselect?: { ids: string
   const groups = useMemo(() => groupByCategory(recipients), [recipients]);
   const allCategories = useMemo(() => categoriesOf(data.settings), [data.settings]);
   const queued = recipients.filter((r) => r.status === "queued").length;
-  const used = sentToday(campaigns);
+  const used = sentToday(campaigns, todayISO(), counted);
 
   const addFromFilter = () => {
     const since = new Date(Date.now() - Number(pick.days) * 864e5).toISOString().slice(0, 10);
@@ -120,7 +126,7 @@ export default function MessageCenter({ preselect }: { preselect?: { ids: string
     if (c.startAt && Date.now() < new Date(c.startAt).getTime()) return;
     r.busy = true;
     try {
-      const check = safetyCheck(c, sentToday(campaignsRef.current));
+      const check = safetyCheck(c, usedNow(campaignsRef.current));
       if (check.pause && check.alert) return void (await alertAndPause(c, check.alert));
       let mode_ = "";
       try {
@@ -155,12 +161,14 @@ export default function MessageCenter({ preselect }: { preselect?: { ids: string
       } catch (e) {
         result = { ...rec, status: "failed", reason: String((e as Error).message || e).slice(0, 120), sentAt: new Date().toISOString() };
       }
+      setCounted((n) => n + 1); countedRef.current += 1;
+      setDoc(doc(db, "users", workspaceUid!, "waDailyCounts", todayISO()), { date: todayISO(), sent: increment(1) }, { merge: true }).catch(() => {});
       let next: Campaign = { ...c, recipients: c.recipients.map((x, i) => (i === idx ? result : x)), heartbeatAt: new Date().toISOString() };
       next = await save(next);
       if (result.status === "sent") {
         await updateItem("leads", withHistory({ ...lead, lastContactAt: result.sentAt }, { type: "message", text: `Campaign "${c.name}": ${rec.text.slice(0, 140)}`, by: user?.email || "" }));
       }
-      const after = safetyCheck(next, sentToday(campaignsRef.current.map((x) => (x.id === next.id ? next : x))));
+      const after = safetyCheck(next, usedNow(campaignsRef.current.map((x) => (x.id === next.id ? next : x))));
       if (after.pause && after.alert) return void (await alertAndPause(next, after.alert));
       // Screen mode reloads WhatsApp for each send: keep at least a minute between messages.
       r.nextAt = Date.now() + Math.max(clampDelay(c.delaySec), mode_ === "dom" ? 60 : 0) * 1000;
@@ -432,6 +440,7 @@ export default function MessageCenter({ preselect }: { preselect?: { ids: string
       </section>
 
       <section className="mcList">
+        {note && <div className="small waWebNote" onClick={() => setNote("")}>{note}</div>}
         <div className="mcHead">
           <b>Campaigns</b>
           {clearable(campaigns).length > 0 && <button className="btnSmall" onClick={clearFinished} title="Mukammal / band campaigns database se hata dein">🧹 Complete wali delete ({clearable(campaigns).length})</button>}

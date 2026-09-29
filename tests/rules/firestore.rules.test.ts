@@ -362,6 +362,11 @@ describe("monthly closing & history protection", () => {
     await assertFails(getDocs(collection(db("acct"), `users/${WS}/optOuts`)));
   });
 
+  it("the daily send counter is for campaign managers only", async () => {
+    await assertSucceeds(setDoc(wsDoc("leadmgr", "waDailyCounts/2026-09-29"), { date: "2026-09-29", sent: 1 }));
+    await assertFails(setDoc(wsDoc("acct", "waDailyCounts/2026-09-29"), { sent: 0 }));
+  });
+
   it("campaign managers can delete campaigns; others cannot", async () => {
     await assertSucceeds(setDoc(wsDoc("leadmgr", "waCampaigns/D1"), { id: "D1", status: "completed" }));
     await assertFails(deleteDoc(wsDoc("acct", "waCampaigns/D1")));

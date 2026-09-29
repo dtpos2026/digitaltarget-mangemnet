@@ -160,11 +160,15 @@ export function buildRecipients(
 
 const dayOf = (iso?: string) => String(iso || "").slice(0, 10);
 
-/** Messages already sent today across all campaigns (the daily cap is shared). */
-export function sentToday(campaigns: Campaign[], today = new Date().toISOString().slice(0, 10)): number {
+/**
+ * Messages sent today. The daily cap is shared by all campaigns and is kept in
+ * its own counter (`waDailyCounts/{date}`), so deleting a campaign never resets
+ * it; the campaigns' own send times are counted too, and the larger figure wins.
+ */
+export function sentToday(campaigns: Campaign[], today = new Date().toISOString().slice(0, 10), counted = 0): number {
   let n = 0;
   for (const c of campaigns) for (const r of c.recipients || []) if (r.sentAt && dayOf(r.sentAt) === today) n++;
-  return n;
+  return Math.max(n, Number(counted) || 0);
 }
 
 /**
@@ -237,17 +241,11 @@ export function groupByCategory(recipients: Recipient[]) {
 
 const today_ = () => new Date().toISOString().slice(0, 10);
 
-/**
- * Why a campaign cannot be deleted right now, or "" when it can. The daily
- * message cap is counted from the campaigns' send times, so a campaign that
- * sent something today stays until tomorrow (deleting it would reset the cap).
- */
-export function deleteBlocker(c: Campaign, today = today_()): string {
+/** Why a campaign cannot be deleted right now, or "" when it can. */
+export function deleteBlocker(c: Campaign): string {
   if (c.status === "running") return "Chal rahi campaign delete nahi hoti — pehle Pause / Stop karein.";
-  if ((c.recipients || []).some((r) => r.sentAt && dayOf(r.sentAt) === today)) return "Aaj is campaign se messages gaye hain — rozana limit ka hisab is se juda hai, kal delete kar sakte hain.";
   return "";
 }
 
 /** Finished campaigns that can be cleared in one go. */
-export const clearable = (list: Campaign[], today = today_()) =>
-  list.filter((c) => ["completed", "stopped"].includes(c.status) && !deleteBlocker(c, today));
+export const clearable = (list: Campaign[]) => list.filter((c) => ["completed", "stopped"].includes(c.status) && !deleteBlocker(c));

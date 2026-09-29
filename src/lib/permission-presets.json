@@ -393,6 +393,9 @@
     "waCampaigns": [
       "campaigns.manage"
     ],
+    "waDailyCounts": [
+      "campaigns.manage"
+    ],
     "optOuts": [
       "campaigns.manage",
       "leads.view",
@@ -460,6 +463,9 @@
       "history.manage"
     ],
     "waCampaigns": [
+      "campaigns.manage"
+    ],
+    "waDailyCounts": [
       "campaigns.manage"
     ],
     "optOuts": [
