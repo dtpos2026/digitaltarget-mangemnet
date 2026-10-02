@@ -3,6 +3,8 @@
 // service catalog (src/lib/catalog.ts); the classifier never invents a new
 // category. whatsapp-service/src/classify.ts uses the same table.
 
+import { normalizeLines } from "./leadAgent";
+
 export interface ChatLine { text: string; fromMe: boolean }
 export interface ChatSuggestion { line: string | null; status: string; reason: string }
 
@@ -36,7 +38,15 @@ const INTEREST = /\b(price|rate|rates|kitne|kitna|charges|cost|package|packages|
 const RANK: Record<string, number> = { New: 0, Contacted: 1, Interested: 2, "Follow-up": 2, Lost: 3, Converted: 4 };
 
 /** Messages oldest → newest. */
-export function classifyChat(lines: ChatLine[]): ChatSuggestion {
+/** Every service line the chat mentions, most mentioned first. */
+export function linesMentioned(raw: ChatLine[]): string[] {
+  const all = normalizeLines(raw).map((l) => l.text || "").join(" \n ");
+  return LINE_KEYWORDS.map(([name, re]) => [name, (all.match(re) || []).length] as const).filter(([, n]) => n > 0).sort((a, b) => b[1] - a[1]).map(([n]) => n);
+}
+
+export function classifyChat(raw: ChatLine[]): ChatSuggestion {
+  // Urdu script is mapped to the same words first, so one rule set reads Urdu, Roman Urdu and English.
+  const lines = normalizeLines(raw);
   const theirs = lines.filter((l) => !l.fromMe && l.text).map((l) => l.text);
   const all = lines.map((l) => l.text || "").join(" \n ");
 
@@ -47,6 +57,8 @@ export function classifyChat(lines: ChatLine[]): ChatSuggestion {
     const hits = (all.match(re) || []).length;
     if (hits > best) { best = hits; line = name; }
   }
+  // POS / software for a restaurant is DTPOS, not a shop POS.
+  if ((line === "Retail POS" || line === "Custom Software") && /\b(restaurant|resturant|cafe|hotel|dhaba|biryani|pizza|bakery|fast ?food)\b/i.test(all) && /\b(pos|software|system|billing)\b/i.test(all)) line = "Restaurant Software / DTPOS";
 
   // Status: strongest signal wins; lost/follow-up only count from the customer.
   let status = lines.some((l) => l.fromMe) ? "Contacted" : "New";

@@ -1122,3 +1122,12 @@ td { font-size: 13.5px; }
 .posField input[type=range] { width: 110px; }
 
 .acctClose { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; border: 1px dashed var(--border, #d8cdef); border-radius: 10px; padding: 8px 10px; margin-top: 8px; }
+
+/* Lead agent brief */
+.leadBrief { border: 1px solid var(--border, #e4daf3); border-radius: 10px; padding: 8px 10px; margin: 6px 0; display: grid; gap: 4px; background: rgba(91,33,182,.04); }
+.leadBrief.vip { border-color: #d4a017; background: rgba(212,160,23,.08); }
+.leadBriefTags { display: flex; gap: 4px; flex-wrap: wrap; }
+.vipBadge { background: #d4a017 !important; color: #fff !important; }
+.leadBriefSum { font-size: 13px; }
+.leadBriefActions { margin: 0; padding-left: 18px; font-size: 12.5px; }
+.leadBriefEv { opacity: .8; }

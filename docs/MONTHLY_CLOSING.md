@@ -67,3 +67,14 @@ Even the administrator cannot delete the audit log or chat data. The rules only 
 
 - Archive snapshots live in their own collection and are **not** loaded at login. They are read only when Admin History is opened.
 - Active screens filter out archived records.
+
+
+## Accounting: day close, month close, clean-up (update)
+
+- **Month close** now also archives every accounting entry dated up to the month end. **Day close** (Accounting → 📅 Din close karein, administrator) archives entries up to a chosen day. Either way the Accounting screen and dashboard start again from zero.
+- **Account balances never change on a close** — the balance in each account is the closing balance and carries forward. Accounts shows the balance at the last close next to the current one.
+- Closed entries are read-only (only the administrator can change them, also enforced in `firestore.rules`). A closed day can be reopened by the administrator.
+- Deleting an open entry no longer changes the account balance automatically: a second question asks whether the entry was a mistake and its money should be put back.
+- Deleting an invoice never reverses payments that are in a closed day / month.
+- An account that still has money or entries cannot be deleted (transfer the balance first).
+- **🧹 Close shuda data saaf karein** (administrator) permanently deletes archived entries of months that have a closed snapshot in Administrator History; balances are untouched.

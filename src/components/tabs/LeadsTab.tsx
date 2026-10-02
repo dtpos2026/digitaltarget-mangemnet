@@ -42,6 +42,7 @@ export default function LeadsTab() {
   const [to, setTo] = useState("");
   const [filterType, setFilterType] = useState<"ALL" | LeadType>("ALL");
   const [filterLevel, setFilterLevel] = useState("ALL");
+  const [onlyVip, setOnlyVip] = useState(false);
   const [q, setQ] = useState("");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [profileId, setProfileId] = useState<string | null>(null);
@@ -144,6 +145,7 @@ export default function LeadsTab() {
     if (filterService !== "ALL" && l.serviceType !== filterService) return false;
     if (filterType !== "ALL" && (l.leadType || l.ai?.leadType) !== filterType) return false;
     if (filterLevel !== "ALL" && l.ai?.level !== filterLevel) return false;
+    if (onlyVip && !l.vip) return false;
     if (q && !`${l.name} ${l.phone} ${l.whatsapp} ${l.notes || ""}`.toLowerCase().includes(q.toLowerCase())) return false;
     return true;
   }).sort((a: any, b: any) => (leadDay(b) + (b.createdAt || "")).localeCompare(leadDay(a) + (a.createdAt || "")));
@@ -349,6 +351,7 @@ export default function LeadsTab() {
           <option value="ALL">Sab lead types</option>
           {(Object.keys(LEAD_TYPE_LABEL) as LeadType[]).map((k) => <option key={k} value={k}>{LEAD_TYPE_LABEL[k]}</option>)}
         </select>
+        <button className={`waChip ${onlyVip ? "active" : ""}`} onClick={() => setOnlyVip(!onlyVip)}>⭐ VIP ({data.leads.filter((x: any) => x.vip).length})</button>
         {inlineAI && <select value={filterLevel} onChange={(e) => setFilterLevel(e.target.value)} aria-label="Interest">
           <option value="ALL">Sab interest</option>
           <option>Hot</option><option>Warm</option><option>Cold</option>
@@ -388,6 +391,8 @@ export default function LeadsTab() {
                     <div className="small">{l.phone || ""}{l.whatsapp && l.whatsapp !== l.phone ? ` • WA ${l.whatsapp}` : ""}</div>
                     <div className="leadTags">
                       {type && <span className={`badge ${type === "ads" ? "pri" : ""}`}>{LEAD_TYPE_LABEL[type]}</span>}
+                      {l.vip && <span className="badge vipBadge">⭐ VIP</span>}
+                      {l.priority === "P1" && !["Converted", "Lost", "Invalid"].includes(l.status) && <span className="badge bad">P1</span>}
                       {l.optOut && <span className="badge bad">Opt-out</span>}
                     </div>
                   </td>

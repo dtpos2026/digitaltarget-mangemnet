@@ -6,6 +6,7 @@ import { formatLocalPhone, normalizePhone } from "@/lib/phone";
 import { LEAD_TYPE_LABEL, LeadAI, analyzeLead, applyAnalysis, conversationOf, levelClass, withHistory } from "@/lib/leadAnalysis";
 import { lineTemplateKey } from "@/lib/waTemplates";
 import WhatsAppComposer from "./WhatsAppComposer";
+import LeadBriefCard from "@/components/LeadBriefCard";
 
 const EVENT_ICON: Record<string, string> = {
   created: "✚", captured: "💬", status: "↔", ai: "✨", message: "📤", reply: "📥", assigned: "👤",
@@ -83,6 +84,7 @@ export default function LeadProfile({ leadId, onClose }: { leadId: string; onClo
                     <div className="lpMeter"><div style={{ width: `${ai.interest}%` }} className={`lvl${ai.level}`} /></div>
                     <b>{ai.interest}%</b> <span className={`badge ${levelClass(ai.level)}`}>{ai.level}</span>
                   </div>
+                  <LeadBriefCard brief={ai.brief} />
                   <div className="small">Interest ek <b>andaza</b> hai jo chat se nikla hai — conversion ki guarantee nahi.</div>
                   <div className="lpRow"><span>Requested service</span><b>{ai.line || "Pata nahi chala"}</b></div>
                   <div className="lpRow"><span>Suggested status</span><b>{ai.suggestedStatus}</b></div>

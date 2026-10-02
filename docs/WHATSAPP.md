@@ -91,6 +91,10 @@ Limits:
 - The picked file stays in **this browser** (IndexedDB), not in the cloud; the campaign runs only while the portal tab is open anyway. If the file is missing later (other computer / cleared browser) the campaign pauses and says so. Photo / video needs the extension's *Fast mode*; in Screen mode use a link.
 - **Delete**: *Delete* on a campaign removes it (recipients, statuses, replies) from the database; *Complete wali delete* clears every finished / stopped campaign at once. A running campaign, and a campaign that sent messages **today**, cannot be deleted (the daily message limit is counted from these records) — delete it tomorrow. Leads, their history and the opt-out list are never touched.
 
+## Lead agent (Urdu / Roman Urdu / English)
+
+Every captured or open chat gets a **brief** from the lead agent (`src/lib/leadAgent.ts`): Urdu script is first mapped to the same words as Roman Urdu / English, then the agent writes one line — who the customer is (business type), what they want (all services mentioned), budget, how ready they are (New inquiry / Exploring / Comparing price / Ready to buy / Customer / Not interested), urgency, objections (price too high, thinking, wants samples, trust, comparing) — plus **priority** (P1 today, P2 this week, P3 no rush), **VIP** (big budget, chain / company, several services, ready / urgent) with the reasons, 1–3 concrete next steps, and the customer's own words it is based on. Shown in the capture review (with "Sirf VIP"), the WhatsApp chat panel, the lead profile, the Leads list (⭐ VIP filter, P1 tag) and AI Analysis → Leads (VIP first). The 24/7 server (`whatsapp-service`) still uses the older keyword table without Urdu-script mapping.
+
 ## Option 2 — Server (24/7 capture, QR / linked device)
 
 The portal links **0345-1873354** the way WhatsApp Web does: an admin clicks

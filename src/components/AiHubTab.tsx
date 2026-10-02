@@ -19,6 +19,7 @@ import GrowthAnalysis from "@/components/GrowthAnalysis";
 import MarginReport from "@/components/MarginReport";
 import ModuleInsights from "@/components/ModuleInsights";
 import { BusinessReport } from "@/components/tabs/ReportsTab";
+import LeadBriefCard from "@/components/LeadBriefCard";
 
 const rs = (n: number) => `Rs ${fmtMoney(Math.round(Number(n) || 0))}`;
 const CLOSED = ["Converted", "Lost", "Invalid"];
@@ -30,7 +31,9 @@ function LeadAiPanel() {
   const open = data.leads.filter((l: any) => !CLOSED.includes(l.status));
   const withAi = open.filter((l: any) => l.ai);
   const rank: Record<string, number> = { Hot: 0, Warm: 1, Cold: 2 };
-  const list = [...withAi].sort((a: any, b: any) => (rank[a.ai.level] - rank[b.ai.level]) || (b.ai.interest - a.ai.interest));
+  const prio: Record<string, number> = { P1: 0, P2: 1, P3: 2 };
+  // VIP first, then priority, then interest.
+  const list = [...withAi].sort((a: any, b: any) => (Number(!!b.vip) - Number(!!a.vip)) || ((prio[a.ai.brief?.priority] ?? 1) - (prio[b.ai.brief?.priority] ?? 1)) || (rank[a.ai.level] - rank[b.ai.level]) || (b.ai.interest - a.ai.interest));
   const count = (lvl: string) => withAi.filter((l: any) => l.ai.level === lvl).length;
   const today = todayISO();
   const due = open.filter((l: any) => l.followUpDate && l.followUpDate <= today);
@@ -56,6 +59,7 @@ function LeadAiPanel() {
         <div><span>High (Hot)</span><b>{count("Hot")}</b></div>
         <div><span>Medium (Warm)</span><b>{count("Warm")}</b></div>
         <div><span>Low (Cold)</span><b>{count("Cold")}</b></div>
+        <div><span>⭐ VIP</span><b>{open.filter((l: any) => l.vip).length}</b><em>P1: {withAi.filter((l: any) => l.ai.brief?.priority === "P1").length}</em></div>
         <div><span>Follow-up due</span><b className={due.length ? "warnText" : ""}>{due.length}</b></div>
       </div>
       <div className="tablewrap" style={{ marginTop: 8, maxHeight: 460 }}>
@@ -67,7 +71,7 @@ function LeadAiPanel() {
                 <td><b>{l.name}</b><div className="small">{l.phone || ""} • {l.status}</div></td>
                 <td>{l.serviceType || l.ai.line || "—"}</td>
                 <td><span className={`badge ${levelClass(l.ai.level)}`}>{l.ai.level === "Hot" ? "High" : l.ai.level === "Warm" ? "Medium" : "Low"} {l.ai.interest}%</span>{l.ai.potentialValue ? <div className="small">≈ {rs(l.ai.potentialValue)}</div> : null}</td>
-                <td className="small">{l.ai.nextAction}</td>
+                <td className="small">{l.ai.brief ? <LeadBriefCard brief={l.ai.brief} compact /> : l.ai.nextAction}</td>
                 <td className="small">{l.followUpDate || l.ai.followUp?.date || "—"}</td>
                 <td><button className="btnSmall" onClick={() => navigate({ tab: "leads" })}>Leads →</button></td>
               </tr>

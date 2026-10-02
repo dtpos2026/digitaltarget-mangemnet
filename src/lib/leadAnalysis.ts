@@ -7,7 +7,9 @@
 //
 // The interest % is an estimate from the conversation, not a promise of
 // conversion; the UI labels it that way.
-import { ChatLine, classifyChat } from "./chatClassifier";
+import { ChatLine, classifyChat, linesMentioned } from "./chatClassifier";
+import { LeadBrief, buildBrief, normalizeLines } from "./leadAgent";
+export type { LeadBrief } from "./leadAgent";
 import { activeServicesOf, categoryOfLine, firstInvoiceAmount, linesOf } from "./catalog";
 import { shouldMoveStatus } from "./leadCapture";
 import { OPT_OUT_RE } from "./waTemplates";
@@ -44,6 +46,8 @@ export interface LeadAI {
   lastFromMe: boolean;
   customerMessages: number;
   optOut: boolean;
+  /** Agent brief: summary, stage, VIP, objections, next steps (newer analyses only). */
+  brief?: LeadBrief;
 }
 
 /**
@@ -127,7 +131,9 @@ const SOFTWARE_CATS = ["Software Development", "Development"];
 const addDays = (from: Date, n: number) => new Date(from.getTime() + n * 864e5).toISOString().slice(0, 10);
 
 export function analyzeLead(lead: any, settings: unknown, today = new Date()): LeadAI {
-  const lines = conversationOf(lead);
+  const rawLines = conversationOf(lead);
+  // Urdu script → the same words as Roman Urdu / English for every rule below.
+  const lines = normalizeLines(rawLines);
   const cls = classifyChat(lines);
   const known = linesOf(settings);
   // Only lines that exist in the catalog; otherwise keep the lead's own.
@@ -194,11 +200,27 @@ export function analyzeLead(lead: any, settings: unknown, today = new Date()): L
   } else if (suggestedStatus === "Follow-up") nextAction = "Follow-up call / message karein";
   else nextAction = line ? `${line} ki details / price list bhejein aur zarurat poochhein` : "Zarurat poochhein (kaun si service chahiye)";
 
+  const leadType = leadTypeOf(lead, lines);
+  let needs = linesMentioned(lines).filter((l) => known.includes(l));
+  if (line && !needs.includes(line)) needs.unshift(line);
+  // A restaurant asking for "POS software" wants DTPOS; a specific software line makes "Custom Software" redundant.
+  const isRestaurant = /\b(restaurant|resturant|cafe|hotel|dhaba|food|biryani|pizza|bakery|kitchen)\b/i.test(theirText);
+  if (isRestaurant && needs.includes("Retail POS") && known.includes("Restaurant Software / DTPOS")) needs = needs.map((n) => (n === "Retail POS" ? "Restaurant Software / DTPOS" : n));
+  if (needs.includes("Custom Software") && needs.some((n) => ["Restaurant Software / DTPOS", "Retail POS", "Travel Agency Software", "AI Software Development"].includes(n))) needs = needs.filter((n) => n !== "Custom Software");
+  needs = Array.from(new Set(needs));
+  const brief = buildBrief(rawLines, lines, {
+    name: lead.name, status: suggestedStatus, line, needs, budget: budgetFromChat(lines), potentialValue, interest, optOut,
+    unanswered, isAds: leadType === "ads",
+    daysSinceLast: lastDate ? Math.max(0, Math.floor((today.getTime() - new Date(`${lastDate}T12:00:00`).getTime()) / 864e5)) : null,
+  });
+  // The agent's first step is more specific than the generic one when the chat says more.
+  if (!optOut && brief.actions[0] && (brief.stage === "Ready to buy" || brief.objections.length || brief.vip)) nextAction = brief.actions[0];
+
   return {
-    version: 1, analyzedAt: new Date().toISOString(), line, category, leadType: leadTypeOf(lead, lines),
+    version: 1, analyzedAt: new Date().toISOString(), line, category, leadType,
     interest, level, suggestedStatus, statusReason: cls.reason, potentialValue, valueBasis,
     followUp: { required, date, reason }, nextAction,
-    lastMessage: (last?.text || "").slice(0, 200), lastFromMe: !!last?.fromMe, customerMessages: theirs.length, optOut,
+    lastMessage: (rawLines[rawLines.length - 1]?.text || "").slice(0, 200), lastFromMe: !!last?.fromMe, customerMessages: theirs.length, optOut, brief,
   };
 }
 
@@ -214,6 +236,12 @@ export function applyAnalysis(lead: any, ai: LeadAI, opts: { moveStatus?: boolea
     next.status = ai.suggestedStatus; changes.push(`status: ${lead.status || "New"} → ${ai.suggestedStatus}`);
   }
   if (ai.optOut && !lead.optOut) { next.optOut = true; changes.push("opt-out"); }
+  if (ai.brief) {
+    // VIP is a flag on the lead (filters, sorting); once set by hand it stays.
+    if (ai.brief.vip && !lead.vip) { next.vip = true; changes.push("VIP"); }
+    next.priority = ai.brief.priority;
+    if (ai.brief.business && !lead.business) next.business = ai.brief.business;
+  }
   if (!lead.followUpDate && ai.followUp.required) { next.followUpDate = ai.followUp.date; changes.push(`follow-up ${ai.followUp.date}`); }
   next = withHistory(next, { type: "ai", text: `AI: ${ai.level} (${ai.interest}%)${ai.line ? ` • ${ai.line}` : ""}${changes.length ? ` • ${changes.join(", ")}` : ""}`, by: opts.by });
   return next;

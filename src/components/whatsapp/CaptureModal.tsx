@@ -14,6 +14,7 @@ import { formatLocalPhone } from "@/lib/phone";
 import { useCaptureBlocklist } from "@/lib/useCaptureBlocklist";
 import { isSkippedJid, phoneFromJid, realJid, waExt } from "@/lib/waExtension";
 import { conversationName, updateConversation, WaConversation } from "./useWhatsApp";
+import LeadBriefCard from "@/components/LeadBriefCard";
 
 /** Where chats are read from: WhatsApp Web through the browser extension, or the server's copy. */
 export type CaptureSource = { kind: "extension" } | { kind: "service"; ws: string };
@@ -210,7 +211,9 @@ export default function CaptureModal({ source, onClose }: { source: CaptureSourc
     hot: candidates.filter((i) => i.a.level === "Hot").length,
     warm: candidates.filter((i) => i.a.level === "Warm").length,
     cold: candidates.filter((i) => i.a.level === "Cold").length,
+    vip: candidates.filter((i) => i.a.ai?.brief?.vip).length,
   };
+  const pickVip = () => setItems((xs) => xs.map((i) => (i.a.excluded && !i.forced ? i : { ...i, picked: !!i.a.ai?.brief?.vip && i.action !== "skip" })));
 
   return (
     <div className="dtModalBackdrop" onClick={() => !busy && onClose()}>
@@ -325,6 +328,7 @@ export default function CaptureModal({ source, onClose }: { source: CaptureSourc
               <button className="btnSmall" onClick={() => setLevel(["Hot", "Warm", "Cold"])}>Sab select</button>
               <button className="btnSmall" onClick={() => setLevel([])}>Clear</button>
               <button className="btnSmall" onClick={() => setLevel(["Hot"])}>Sirf High</button>
+              {counts.vip > 0 && <button className="btnSmall" onClick={pickVip}>⭐ Sirf VIP ({counts.vip})</button>}
               <button className="btnSmall" onClick={() => setLevel(["Hot", "Warm"])}>High + Medium</button>
               <button className="btnSmall" onClick={() => setStep("filters")}>← Filters badlein</button>
             </div>
@@ -339,6 +343,7 @@ export default function CaptureModal({ source, onClose }: { source: CaptureSourc
                       <td><b>{i.chat.name || "Unknown"}</b><div className="small">{i.chat.phone ? formatLocalPhone(i.chat.phone) : "Number chhupa hua"}</div>
                         {(i.meta.labels || []).map((l) => <span key={l} className="badge" style={{ marginRight: 4 }}>{l}</span>)}
                         {i.forced && <div className="small">⚠ aap ne shamil kiya</div>}
+                        <LeadBriefCard brief={i.a.ai?.brief} compact />
                       </td>
                       <td><span className={`badge ${i.a.kind === "ads" ? "ok" : ""}`}>{i.a.kind === "ads" ? "Ads lead" : "Organic"}</span><div className="small">{i.meta.saved ? "Saved contact" : "Unsaved number"}</div></td>
                       <td>{i.a.line || "—"}<div className="small">{i.a.group}</div></td>

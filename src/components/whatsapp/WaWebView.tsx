@@ -16,6 +16,7 @@ import CaptureModal from "./CaptureModal";
 import AiTrainingModal from "@/components/AiReplyTraining";
 import { draftReply } from "@/lib/replyAssistant";
 import { useCaptureBlocklist } from "@/lib/useCaptureBlocklist";
+import LeadBriefCard from "@/components/LeadBriefCard";
 
 const WA_URL = "https://web.whatsapp.com/";
 const MODE_KEY = "dt.waWebMode";
@@ -151,6 +152,10 @@ export default function WaWebView({ openPhone }: { openPhone?: { phone: string; 
   const suggestion = active && active.messages.length ? classifyChat(active.messages.filter((m) => m.type !== "call_log").map((m) => ({ text: m.text, fromMe: m.fromMe }))) : null;
 
   const chatLines = active ? active.messages.filter((m) => m.type !== "call_log").map((m) => ({ text: m.text, fromMe: m.fromMe })) : [];
+  // Live agent brief of the open chat (Urdu / Roman Urdu / English).
+  const liveBrief = active && chatLines.length
+    ? analyzeLead({ ...(lead || {}), name: lead?.name || active.name || active.pushname, status: lead?.status || "New", source: lead?.source || "WhatsApp", chat: chatLines.slice(-30), date: lead?.date || todayISO() }, data.settings).brief
+    : null;
   const draft = active && chatLines.length
     ? draftReply(chatLines, { settings: data.settings, name: lead?.name || active.name || active.pushname, kb: data.settings?.aiKnowledge, company: data.settings?.companyName })
     : null;
@@ -280,7 +285,7 @@ export default function WaWebView({ openPhone }: { openPhone?: { phone: string; 
                   </div>
                 </div>
               ) : <div className="small">Abhi lead nahi hai.</div>}
-              {suggestion && (
+              {liveBrief ? <LeadBriefCard brief={liveBrief} /> : suggestion && (
                 <div className="aiSuggest small"><span>✨ Chat se andaza</span><div><b>{suggestion.line || "—"}</b> • <b>{suggestion.status}</b></div><div>{suggestion.reason}</div></div>
               )}
               {(canLead || can("leads.edit")) && (
