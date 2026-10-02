@@ -57,7 +57,7 @@ export default function AdminHistoryTab() {
 
   const doClose = async () => {
     if (!workspaceUid || !preview) return;
-    if (!confirm(`Are you sure you want to close ${monthLabel(month)}? All historical financial and operational data will remain available in Administrator History.\n\n${preview.counts.archivedInvoices} paid invoices, ${preview.counts.archivedProjects} completed projects, ${preview.counts.archivedAssignments} tasks aur ${preview.counts.archivedSchedule} schedule items archive honge. Clients, accounts, outstanding balances, services, team aur settings waise hi rahenge.`)) return;
+    if (!confirm(`Are you sure you want to close ${monthLabel(month)}? All historical financial and operational data will remain available in Administrator History.\n\n${preview.counts.archivedInvoices} paid invoices, ${preview.counts.archivedProjects} completed projects, ${preview.counts.archivedAssignments} tasks aur ${preview.counts.archivedSchedule} schedule items aur ${preview.counts.archivedAccounting || 0} accounting entries archive honge (Accounting naye mahine ke liye zero se shuru). Clients, accounts ke closing balances, outstanding, services, team aur settings waise hi rahenge.`)) return;
     setBusy("close"); setMsg("");
     try {
       // Campaign summaries go into the snapshot too.
@@ -97,7 +97,7 @@ export default function AdminHistoryTab() {
   const remove = async (a: MonthSnapshot) => {
     if (!workspaceUid) return;
     const n = Object.values(a.archived || {}).reduce((s, ids) => s + (ids?.length || 0), 0);
-    if (!confirm(`This action will permanently delete the selected historical data from the database. This cannot be undone.\n\n${monthLabel(a.month)}: snapshot + ${n} archived records (paid invoices, completed projects, tasks, schedule).\n\nRecords wapas active karne hain to "Reopen" use karein.`)) return;
+    if (!confirm(`This action will permanently delete the selected historical data from the database. This cannot be undone.\n\n${monthLabel(a.month)}: snapshot + ${n} archived records (paid invoices, completed projects, tasks, schedule, accounting entries). Account balances par koi asar nahi.\n\nRecords wapas active karne hain to "Reopen" use karein.`)) return;
     if (prompt(`Tasdeeq ke liye month likhein: ${a.month}`) !== a.month) { setMsg("Delete cancel — month match nahi hua"); return; }
     setBusy(a.month);
     try { await deleteMonth(workspaceUid, a.month, true); await reload({ silent: true }); await load(); setOpen(null); setMsg(`${monthLabel(a.month)} permanently delete ho gaya`); }
@@ -190,14 +190,15 @@ export default function AdminHistoryTab() {
                     <li>{preview.counts.archivedProjects} completed projects</li>
                     <li>{preview.counts.archivedAssignments} completed tasks</li>
                     <li>{preview.counts.archivedSchedule} done schedule items</li>
+                    <li>{preview.counts.archivedAccounting || 0} accounting entries (Accounting zero se shuru)</li>
                   </ul>
                 </div>
                 <div>
                   <div className="lpHead">Waise hi rahenge (reset nahi)</div>
                   <ul className="small">
-                    <li>{data.clients.length} clients, {data.wallets.length} accounts (balances same)</li>
+                    <li>{data.clients.length} clients, {data.wallets.length} accounts — closing balance aage jayega, badlega nahi</li>
                     <li>Baqaya: {rs(preview.outstanding.receivable)} receivable, {rs(preview.outstanding.teamDues)} team dues</li>
-                    <li>Services, team, settings, leads, accounting ledger</li>
+                    <li>Services, team, settings, leads</li>
                   </ul>
                 </div>
                 <div>

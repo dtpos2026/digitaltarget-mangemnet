@@ -12,16 +12,20 @@
 // retried: stamping is idempotent, so a half-finished close never leaves
 // data in a different state than a finished one.
 //
-// Never touched: clients, services, team, accounts / wallets, settings,
-// accounting ledger rows, leads, and anything still open (unpaid invoices,
-// running projects, pending tasks) — those carry forward.
+// Accounting entries dated up to the month end are archived too, so the
+// Accounting screen starts the new month at zero. Wallet balances are never
+// changed by a close: the closing balance carries forward as it is.
+//
+// Never touched: clients, services, team, accounts / wallets (balances),
+// settings, leads, and anything still open (unpaid invoices, running
+// projects, pending tasks) — those carry forward.
 import { activeServicesOf, categoryOfLine, serviceById } from "./catalog";
 import { MoneySummary, inMonth, isExpense, isIncome, monthEnd, monthStart, scopeOf, shiftMonth, summarize } from "./finance";
 import { invoiceView } from "./invoice";
 import { analyzeBusiness } from "./insights";
 import { suggestTarget, targetOf } from "./targets";
 
-export const ARCHIVABLE = ["invoices", "projects", "assignments", "schedule"] as const;
+export const ARCHIVABLE = ["invoices", "projects", "assignments", "schedule", "accounting"] as const;
 export type Archivable = (typeof ARCHIVABLE)[number];
 
 const DONE = /complete|done|approved|delivered|cancel/i;
@@ -46,6 +50,8 @@ export function recordsToArchive(data: any, month: string): Record<Archivable, s
     assignments: (data.assignments || []).filter((a: any) => !a.archivedMonth && DONE.test(a.status || "") && inOrBefore(day(a.deadline || a.updatedAt || a.assignedAt))).map((a: any) => a.id),
     // Schedule items of the month that are done / cancelled. Pending ones stay visible.
     schedule: (data.schedule || []).filter((s: any) => !s.archivedMonth && DONE.test(s.status || "") && inOrBefore(day(s.date))).map((s: any) => s.id),
+    // Every accounting entry dated up to the month end (the ledger of the closed period).
+    accounting: (data.accounting || []).filter((a: any) => !a.archivedMonth && inOrBefore(day(a.date))).map((a: any) => a.id),
   };
 }
 
@@ -210,7 +216,7 @@ export function buildMonthSnapshot(data: any, month: string, opts: { closedBy: s
     invoices: monthInvoices.length, payments: rows.filter(isIncome).length, expenses: rows.filter(isExpense).length,
     newLeads: newLeads.length, projectsCompleted: completed.length, tasksDone: assignmentsDone.length,
     archivedInvoices: toArchive.invoices.length, archivedProjects: toArchive.projects.length,
-    archivedAssignments: toArchive.assignments.length, archivedSchedule: toArchive.schedule.length,
+    archivedAssignments: toArchive.assignments.length, archivedSchedule: toArchive.schedule.length, archivedAccounting: toArchive.accounting.length,
   };
 
   const compact = (a: any) => ({ id: a.id, date: day(a.date), category: a.category || "", scope: a.type === "OUT" ? scopeOf(a, settings) : "", amount: Number(a.amount) || 0, client: client(a.clientId)?.name || "", desc: String(a.desc || "").slice(0, 120), walletId: a.walletId || "" });

@@ -1,4 +1,6 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
+import { useAuth } from "@/contexts/AuthContext";
+import { listArchives } from "@/lib/closingStore";
 import { useData } from "@/contexts/DataContext";
 import { uid, todayISO, fmtMoney } from "@/lib/db";
 import { printElementHTML } from "@/lib/exportUtils";
@@ -14,6 +16,19 @@ export default function AccountsTab() {
   const [trDate, setTrDate] = useState(todayISO());
   const [trAmount, setTrAmount] = useState("");
   const [trNote, setTrNote] = useState("");
+  // Balance of each account at the last close (day close or month close) — to compare / repair.
+  const { workspaceUid, can } = useAuth();
+  const [lastClose, setLastClose] = useState<{ label: string; at: string; wallets: { id: string; balance: number }[] } | null>(null);
+  useEffect(() => {
+    const days: any[] = Array.isArray(data.settings?.accountingDayCloses) ? data.settings.accountingDayCloses : [];
+    const fromDay = days.length ? { label: `Din close ${days[days.length - 1].date}`, at: days[days.length - 1].closedAt, wallets: days[days.length - 1].wallets || [] } : null;
+    if (!workspaceUid || !can("history.manage")) { setLastClose(fromDay); return; }
+    listArchives(workspaceUid).then((l) => {
+      const m = l.filter((a: any) => a.status === "closed" && Array.isArray(a.wallets)).sort((a: any, b: any) => String(b.closedAt || "").localeCompare(String(a.closedAt || "")))[0] as any;
+      const fromMonth = m ? { label: `Mahina close ${m.month}`, at: m.closedAt || "", wallets: m.wallets } : null;
+      setLastClose(!fromMonth ? fromDay : !fromDay ? fromMonth : String(fromDay.at) > String(fromMonth.at) ? fromDay : fromMonth);
+    }).catch(() => setLastClose(fromDay));
+  }, [workspaceUid, can, data.settings?.accountingDayCloses]);
 
   const handleAdd = async () => {
     if (!name.trim()) { alert("Account name required"); return; }
@@ -32,6 +47,16 @@ export default function AccountsTab() {
       clientId: "", projectId: "", category: "Account Adjustment",
       walletId: w.id, amount: Math.abs(diff), desc: `Manual adjustment (${w.name})`, receipt: null,
     });
+  };
+
+  // An account with money or ledger entries is never deleted: entries would point to nothing and the khata breaks.
+  const removeWallet = async (w: any) => {
+    const used = data.accounting.filter((a: any) => a.walletId === w.id).length + data.walletTransfers.filter((t: any) => t.fromId === w.id || t.toId === w.id).length;
+    if (Math.round(Number(w.balance) || 0) !== 0 || used) {
+      alert(`"${w.name}" delete nahi ho sakta — is mein Rs ${fmtMoney(w.balance || 0)} balance aur ${used} entries hain.\n\nPehle balance doosre account mein Transfer karein. Entries waali account history ke liye rehti hai.`);
+      return;
+    }
+    if (confirm(`"${w.name}" (khali account) delete karein?`)) await removeItem("wallets", w.id);
   };
 
   const handleTransfer = async () => {
@@ -81,16 +106,17 @@ export default function AccountsTab() {
       <hr />
       <div className="tablewrap">
         <table>
-          <thead><tr><th>Name</th><th>Number</th><th>Balance</th><th>Action</th></tr></thead>
+          <thead><tr><th>Name</th><th>Number</th><th>Balance</th>{lastClose && <th title={lastClose.label}>Close par balance</th>}<th>Action</th></tr></thead>
           <tbody>
             {data.wallets.map((w) => (
               <tr key={w.id}>
                 <td><b>{w.name}</b><div className="small">{w.title || ""}</div></td>
                 <td>{w.number || ""}</td>
                 <td><b>Rs {fmtMoney(w.balance || 0)}</b></td>
+                {lastClose && (() => { const c = lastClose.wallets.find((x) => x.id === w.id); return <td className="small">{c ? `Rs ${fmtMoney(c.balance)}` : "—"}<div>{lastClose.label}</div></td>; })()}
                 <td className="rowActions">
                   <button className="btnSmall" onClick={() => handleAdjust(w)}>Edit Balance</button>
-                  <button className="btnSmall" onClick={() => { if (confirm("Delete?")) removeItem("wallets", w.id); }}>Delete</button>
+                  <button className="btnSmall" onClick={() => removeWallet(w)}>Delete</button>
                 </td>
               </tr>
             ))}

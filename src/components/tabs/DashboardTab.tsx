@@ -1,3 +1,4 @@
+import { activeOnly } from "@/lib/closing";
 import React, { useRef, useEffect, useCallback } from "react";
 import { useData } from "@/contexts/DataContext";
 import { useAuth } from "@/contexts/AuthContext";
@@ -140,7 +141,8 @@ export default function DashboardTab() {
   const dashRef = useRef<HTMLDivElement>(null);
 
   // Shared money rules (src/lib/finance.ts).
-  const allTime = summarize(data.accounting, data.settings);
+  // Open (not closed) entries only — after a day / month close this restarts from zero.
+  const allTime = summarize(activeOnly(data.accounting), data.settings);
   const income = allTime.income, expense = allTime.totalExpense;
   const profit = allTime.netSaving;
 

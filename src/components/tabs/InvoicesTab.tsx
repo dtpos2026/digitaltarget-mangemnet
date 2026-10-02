@@ -374,10 +374,13 @@ export default function InvoicesTab() {
 
   const handleDelete = async (inv: any) => {
     const pays = paymentsOf(inv);
-    const linked = pays.filter((p) => p.accountingId && data.accounting.some((a: any) => a.id === p.accountingId));
-    const unlinked = pays.length - linked.length;
+    // Payments whose ledger entry is in a closed day / month stay as they are (closed balances never change).
+    const linked = pays.filter((p) => p.accountingId && data.accounting.some((a: any) => a.id === p.accountingId && !a.archivedMonth));
+    const closedPays = pays.filter((p) => p.accountingId && data.accounting.some((a: any) => a.id === p.accountingId && a.archivedMonth)).length;
+    const unlinked = pays.length - linked.length - closedPays;
     const msg = [`Invoice ${inv.invoiceNo || inv.id} delete karein?`];
     if (linked.length) msg.push(`\n${linked.length} payment(s) — Rs ${fmtMoney(paidTotal(linked))} — ki Accounting entries delete aur account balance wapas ho jayenge.`);
+    if (closedPays) msg.push(`\n${closedPays} payment(s) close shuda din / mahine ki hain — un ki entry aur account balance NAHI badlenge.`);
     if (unlinked > 0) msg.push(`\n${unlinked} purani payment(s) ki entry khud reverse nahi hogi — Accounting mein check karein.`);
     if (!confirm(msg.join(""))) return;
     // Sum per wallet first: writing each payment against the same (stale)

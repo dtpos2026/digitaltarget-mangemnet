@@ -111,7 +111,7 @@ export default function MainApp() {
       case "projects": return data.projects.length;
       case "assignments": return data.assignments.length;
       case "invoices": return data.invoices.length;
-      case "accounting": return data.accounting.length;
+      case "accounting": return data.accounting.filter((a: any) => !a.archivedMonth).length;
       case "khata": return data.khata.length;
       case "wallets": return data.wallets.length;
       case "team": return data.team.length;

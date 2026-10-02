@@ -1,5 +1,9 @@
-import React, { useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useData } from "@/contexts/DataContext";
+import { useAuth } from "@/contexts/AuthContext";
+import { activeOnly } from "@/lib/closing";
+import { listArchives } from "@/lib/closingStore";
+import { DayClose, clearEntries, clearableEntries, closeDay, entriesToCloseDay, isDayArchive, reopenDay } from "@/lib/accountingClose";
 import { uid, todayISO, fmtMoney } from "@/lib/db";
 import { writeSafeDocument } from "@/lib/safeHtml";
 import ModuleInsights from "@/components/ModuleInsights";
@@ -9,7 +13,24 @@ import {
 } from "@/lib/finance";
 
 export default function AccountingTab() {
-  const { data, addItem, removeItem, updateItem, adjustWallet } = useData();
+  const { data, addItem, removeItem, updateItem, adjustWallet, updateSettings, reload, logAudit } = useData();
+  const { can, workspaceUid, user } = useAuth();
+  const isAdminHist = can("history.manage");
+  const [showClosed, setShowClosed] = useState(false);
+  const [closeDate, setCloseDate] = useState(todayISO());
+  const [closedMonths, setClosedMonths] = useState<Set<string>>(new Set());
+  const [busyClose, setBusyClose] = useState("");
+  const [closeMsg, setCloseMsg] = useState("");
+  useEffect(() => {
+    if (!workspaceUid || !isAdminHist) return;
+    listArchives(workspaceUid).then((l) => setClosedMonths(new Set(l.filter((a) => a.status === "closed").map((a) => a.month)))).catch(() => {});
+  }, [workspaceUid, isAdminHist, data.accounting.length]);
+  const active = useMemo(() => activeOnly(data.accounting), [data.accounting]);
+  const archivedCount = data.accounting.length - active.length;
+  const dayCloses: DayClose[] = Array.isArray(data.settings?.accountingDayCloses) ? data.settings.accountingDayCloses : [];
+  const lastDayClose = dayCloses[dayCloses.length - 1];
+  const clearable = useMemo(() => clearableEntries(data.accounting, closedMonths), [data.accounting, closedMonths]);
+  const walletTotal = data.wallets.reduce((s: number, w: any) => s + (Number(w.balance) || 0), 0);
   const [editId, setEditId] = useState<string | null>(null);
   const [type, setType] = useState("IN");
   const [date, setDate] = useState(todayISO());
@@ -33,12 +54,53 @@ export default function AccountingTab() {
     const known = expenseCats.find((x) => x.name === c);
     if (known) setScope(known.scope);
   };
-  const rows = data.accounting
+  const rows = (showClosed ? data.accounting : active)
     .filter((a: any) => filterScope === "all" || (filterScope === "IN" ? a.type === "IN" : a.type === "OUT" && scopeOf(a, data.settings) === filterScope))
     .slice()
     .sort((a: any, b: any) => String(b.date || "").localeCompare(String(a.date || "")));
   const thisMonth = monthKey();
-  const monthSum = summarize(inRange(data.accounting, monthStart(thisMonth), monthEnd(thisMonth)), data.settings);
+  // Only what is still open: after a day / month close this starts again from zero.
+  const monthSum = summarize(inRange(active, monthStart(thisMonth), monthEnd(thisMonth)), data.settings);
+
+  const doCloseDay = async () => {
+    if (!workspaceUid) return;
+    const n = entriesToCloseDay(data.accounting, closeDate).length;
+    if (!n) { setCloseMsg(`${closeDate} tak koi khuli entry nahi.`); return; }
+    if (!confirm(`${closeDate} tak ki ${n} accounting entries close karein?\n\n• Accounting screen zero se shuru hogi\n• Har account ka balance WAISE HI rahega (closing balance aage jayega)\n• Entries Administrator History / Reports mein rahengi, koi delete nahi hogi\n• Close ki hui entries sirf Administrator badal sakta hai`)) return;
+    setBusyClose("day"); setCloseMsg("");
+    try {
+      const rec = await closeDay(workspaceUid, data, closeDate, user?.email || "");
+      await updateSettings({ ...data.settings, accountingDayCloses: [...dayCloses.filter((d) => d.date !== rec.date), rec].slice(-400) });
+      logAudit({ action: "accounting.close_day", collection: "accounting", entityId: closeDate, details: `${rec.entries} entries closed; income ${rec.income}, expense ${rec.expense}` });
+      await reload({ silent: true });
+      setCloseMsg(`✓ ${closeDate} close — ${rec.entries} entries archive, balances same`);
+    } catch (e) { setCloseMsg("Close nahi hua: " + (e as Error).message); }
+    setBusyClose("");
+  };
+  const doReopenDay = async (d: DayClose) => {
+    if (!workspaceUid || !confirm(`${d.date} ka din dobara kholein? Us din ki entries Accounting screen par wapas aa jayengi (balances par koi asar nahi).`)) return;
+    setBusyClose("reopen");
+    try {
+      const n = await reopenDay(workspaceUid, d.date);
+      await updateSettings({ ...data.settings, accountingDayCloses: dayCloses.filter((x) => x.date !== d.date) });
+      logAudit({ action: "accounting.reopen_day", collection: "accounting", entityId: d.date, details: `${n} entries reopened` });
+      await reload({ silent: true });
+      setCloseMsg(`✓ ${d.date} dobara khul gaya (${n} entries)`);
+    } catch (e) { setCloseMsg("Nahi hua: " + (e as Error).message); }
+    setBusyClose("");
+  };
+  const doClear = async () => {
+    if (!workspaceUid || !clearable.length) return;
+    if (!confirm(`This action will permanently delete the selected historical data from the database. This cannot be undone.\n\n${clearable.length} accounting entries (sirf un mahinon ki jo close ho chuke hain aur jin ka snapshot Administrator History mein hai) delete hongi.\n\nAccount balances par KOI asar nahi hoga.`)) return;
+    setBusyClose("clear");
+    try {
+      const n = await clearEntries(workspaceUid, clearable.map((a: any) => a.id));
+      logAudit({ action: "accounting.clear_closed", collection: "accounting", entityId: "closed", details: `${n} archived entries deleted; wallet balances unchanged` });
+      await reload({ silent: true });
+      setCloseMsg(`✓ ${n} purani entries saaf — balances same`);
+    } catch (e) { setCloseMsg("Saaf nahi hua: " + (e as Error).message); }
+    setBusyClose("");
+  };
 
   const clearForm = () => {
     setEditId(null);
@@ -90,8 +152,12 @@ export default function AccountingTab() {
   };
 
   const handleDelete = async (a: any) => {
-    if (!confirm("Delete entry?")) return;
-    if (a.walletId && data.wallets.some((x) => x.id === a.walletId)) {
+    if (a.archivedMonth) { alert("Ye entry close ho chuki hai (Administrator History). Isay yahan se delete nahi kar sakte — account balance kharab na ho."); return; }
+    if (!confirm(`Entry delete karein?\n${a.date} • ${a.category} • Rs ${fmtMoney(a.amount)}`)) return;
+    const w = a.walletId ? data.wallets.find((x) => x.id === a.walletId) : null;
+    // Balance is only changed when the user asks: a wrong entry (typo) should give its money back,
+    // but deleting a real, already-counted entry must not change the account.
+    if (w && confirm(`"${w.name}" ka balance bhi wapas theek karein?\n\nOK = haan, ye entry ghalat thi — ${a.type === "IN" ? `Rs ${fmtMoney(a.amount)} balance se kam hoga` : `Rs ${fmtMoney(a.amount)} balance mein wapas aayega`}\nCancel = balance JAISA HAI waisa rahe (sirf entry hatayein)`)) {
       await adjustWallet(a.walletId, a.type === "IN" ? -(Number(a.amount) || 0) : Number(a.amount) || 0, "Accounting entry deleted");
     }
     await removeItem("accounting", a.id);
@@ -99,7 +165,7 @@ export default function AccountingTab() {
   };
 
   const printAccounting = () => {
-    const rows = data.accounting.slice().reverse().map(a => {
+    const rows = active.slice().reverse().map(a => {
       const c = data.clients.find(x => x.id === a.clientId);
       const w = data.wallets.find(x => x.id === a.walletId);
       return `<tr><td>${a.date || ""}</td><td>${a.type || ""}</td><td>${c?.name || ""}</td><td>${a.category || ""}</td><td>Rs ${fmtMoney(a.amount || 0)}</td><td>${w?.name || ""}</td><td>${a.desc || ""}</td></tr>`;
@@ -196,6 +262,26 @@ export default function AccountingTab() {
         <div><span>Personal / misc</span><b>Rs {fmtMoney(monthSum.personalExpense)}</b></div>
         <div><span>Net saving</span><b className={monthSum.netSaving < 0 ? "neg" : "pos"}>Rs {fmtMoney(monthSum.netSaving)}</b><em>{monthSum.savingMargin}% margin</em></div>
       </div>
+      <div className="moneyStrip" style={{ marginTop: 8 }}>
+        <div><span>Accounts mein abhi (closing balance)</span><b>Rs {fmtMoney(walletTotal)}</b><em>{data.wallets.map((w: any) => `${w.name}: ${fmtMoney(w.balance || 0)}`).join(" • ") || "—"}</em></div>
+        <div><span>Khuli entries</span><b>{active.length}</b><em>{archivedCount ? `${archivedCount} close ho chuki (History)` : "sab khuli"}</em></div>
+        {lastDayClose && <div><span>Aakhri din close</span><b>{lastDayClose.date}</b><em>{lastDayClose.entries} entries • {lastDayClose.closedBy}</em></div>}
+      </div>
+      {isAdminHist && (
+        <div className="acctClose">
+          <b>📅 Din / hisaab close</b>
+          <input type="date" value={closeDate} max={todayISO()} onChange={(e) => setCloseDate(e.target.value)} aria-label="Close date" />
+          <button className="btnSolid" onClick={doCloseDay} disabled={!!busyClose}>{busyClose === "day" ? "Close ho raha hai…" : "Din close karein"}</button>
+          {lastDayClose && <button className="btnSmall" onClick={() => doReopenDay(lastDayClose)} disabled={!!busyClose}>↺ {lastDayClose.date} dobara kholein</button>}
+          <button className="btnDanger" onClick={doClear} disabled={!!busyClose || !clearable.length} title="Sirf close shuda mahinon ki entries, jin ka snapshot History mein hai">🧹 Close shuda data saaf karein ({clearable.length})</button>
+          <span className="small">Mahina close: Admin History. Balances kabhi nahi badalte.</span>
+          {closeMsg && <span className="small"><b>{closeMsg}</b></span>}
+        </div>
+      )}
+      <label className="permItem" style={{ marginTop: 8 }}>
+        <input type="checkbox" checked={showClosed} onChange={(e) => { setShowClosed(e.target.checked); setShown(100); }} />
+        <span className="small">Close ki hui entries bhi dikhayein (sirf dekhne ke liye)</span>
+      </label>
       <div className="segmented" style={{ margin: "10px 0" }}>
         {([["all", "Sab"], ["IN", "Income"], ["business", "Business"], ["personal", "Personal"]] as const).map(([k, l]) => (
           <button key={k} className={filterScope === k ? "on" : ""} onClick={() => { setFilterScope(k); setShown(100); }}>{l}</button>
@@ -209,8 +295,8 @@ export default function AccountingTab() {
               const c = data.clients.find(x => x.id === a.clientId);
               const w = data.wallets.find(x => x.id === a.walletId);
               return (
-                <tr key={a.id}>
-                  <td>{a.date}</td>
+                <tr key={a.id} className={a.archivedMonth ? "capSkip" : ""}>
+                  <td>{a.date}{a.archivedMonth ? <div className="small">🔒 {isDayArchive(a.archivedMonth) ? "din close" : `${a.archivedMonth} close`}</div> : null}</td>
                   <td><span className={`badge ${a.type === "IN" ? "ok" : "bad"}`}>{a.type}</span></td>
                   <td>{c?.name || ""}</td>
                   <td>{a.category}</td>
@@ -219,8 +305,8 @@ export default function AccountingTab() {
                   <td>{w?.name || ""}</td>
                   <td>{a.receipt?.data ? <button className="btnSmall" onClick={() => { const wi = window.open(""); if(wi) writeSafeDocument(wi, `<img src="${a.receipt.data}" style="max-width:100%"/>`); }}>View</button> : ""}</td>
                   <td className="rowActions">
-                    <button className="btnSmall" onClick={() => handleEdit(a)}>Edit</button>
-                    <button className="btnSmall" onClick={() => handleDelete(a)}>Delete</button>
+                    {!a.archivedMonth && <button className="btnSmall" onClick={() => handleEdit(a)}>Edit</button>}
+                    {!a.archivedMonth && <button className="btnSmall" onClick={() => handleDelete(a)}>Delete</button>}
                   </td>
                 </tr>
               );

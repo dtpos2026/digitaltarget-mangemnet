@@ -49,6 +49,8 @@ describe("recordsToArchive", () => {
     expect(r.projects).toEqual(["P1"]);
     expect(r.assignments).toEqual(["AS1"]);
     expect(r.schedule).toEqual(["S1"]);
+    // every ledger entry up to the month end (October ones stay open)
+    expect(r.accounting.length).toBe((data.accounting || []).filter((a: any) => !a.archivedMonth && String(a.date).slice(0, 10) <= "2026-09-30").length);
   });
 });
 

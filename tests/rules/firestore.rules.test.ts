@@ -335,6 +335,15 @@ describe("monthly closing & history protection", () => {
     await assertSucceeds(setDoc(wsDoc("admin", "monthlyArchives/2026-09"), { month: "2026-09", status: "closing" }));
   });
 
+  it("closed accounting entries: only the administrator can change or delete them", async () => {
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), `users/${WS}/accounting/ACL1`), { id: "ACL1", type: "OUT", amount: 500, date: "2026-09-01", archivedMonth: "day:2026-09-01" });
+    });
+    await assertFails(deleteDoc(wsDoc("manager", "accounting/ACL1")));
+    await assertFails(updateDoc(wsDoc("manager", "accounting/ACL1"), { amount: 1 }));
+    await assertSucceeds(updateDoc(wsDoc("admin", "accounting/ACL1"), { archivedMonth: "" }));
+  });
+
   it("closing stamps records (admin); a manager cannot archive or un-archive", async () => {
     await assertSucceeds(updateDoc(wsDoc("admin", "projects/P1"), { archivedMonth: "2026-09" }));
     await assertFails(updateDoc(wsDoc("manager", "projects/P1"), { archivedMonth: "" }));
