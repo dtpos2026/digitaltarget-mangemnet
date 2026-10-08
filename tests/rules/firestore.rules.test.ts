@@ -7,6 +7,8 @@ import {
   RulesTestEnvironment,
 } from "@firebase/rules-unit-testing";
 import {
+  arrayUnion,
+  runTransaction,
   collection,
   deleteDoc,
   doc,
@@ -37,6 +39,9 @@ const roles: Record<string, Record<string, unknown>> = {
     uid: "userAdmin", email: "ua@dt.pk", role: "custom", workspaceUid: WS,
     permissions: ["users.manage", "leads.view"],
   },
+  sa1: { uid: "sa1", email: "sa1@dt.pk", role: "sales_assistant", workspaceUid: WS, teamId: "T1" },
+  sa2: { uid: "sa2", email: "sa2@dt.pk", role: "sales_assistant", workspaceUid: WS, teamId: "T2" },
+  saUnlinked: { uid: "saUnlinked", email: "sa3@dt.pk", role: "sales_assistant", workspaceUid: WS },
   assigner: {
     uid: "assigner", email: "asg@dt.pk", role: "custom", workspaceUid: WS,
     permissions: ["leads.view", "leads.assign"],
@@ -399,5 +404,86 @@ describe("storage (WhatsApp media)", () => {
     await assertSucceeds(getBytes(ref(env.authenticatedContext("sales").storage(), path)));
     await assertFails(getBytes(ref(env.authenticatedContext("acct").storage(), path)));
     await assertFails(uploadBytes(ref(env.authenticatedContext("admin").storage(), path), new Uint8Array([9])));
+  });
+});
+
+describe("sales assistants: own + pool leads, TAKE LEAD, capture", () => {
+  const seed = async () => {
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      const f = ctx.firestore();
+      const put = (p: string, d: Record<string, unknown>) => setDoc(doc(f, `users/${WS}/${p}`), d);
+      await put("leads/P1", { id: "P1", name: "Pool lead", status: "New", assignedTo: "" });
+      await put("leads/M1", { id: "M1", name: "Mine", status: "Assistant Handling", assignedTo: "T1", takenBy: "T1" });
+      await put("leads/O2", { id: "O2", name: "Other's", status: "Assistant Handling", assignedTo: "T2", takenBy: "T2", phone: "03001112222" });
+      await put("leadPhoneIndex/923001112222", { leadId: "O2", phone: "923001112222" });
+    });
+  };
+
+  it("sees own and pool leads only, by query", async () => {
+    await seed();
+    await assertSucceeds(getDoc(wsDoc("sa1", "leads/P1")));
+    await assertSucceeds(getDoc(wsDoc("sa1", "leads/M1")));
+    await assertFails(getDoc(wsDoc("sa1", "leads/O2")));
+    await assertSucceeds(getDocs(query(collection(db("sa1"), `users/${WS}/leads`), where("assignedTo", "==", "T1"))));
+    await assertSucceeds(getDocs(query(collection(db("sa1"), `users/${WS}/leads`), where("assignedTo", "==", ""))));
+    await assertFails(getDocs(collection(db("sa1"), `users/${WS}/leads`)));
+    await assertFails(getDoc(wsDoc("saUnlinked", "leads/P1")));
+    await assertFails(getDoc(wsDoc("sa1", "invoices/I1")));
+  });
+
+  it("takes a pool lead; the second assistant is refused", async () => {
+    await seed();
+    await assertSucceeds(updateDoc(wsDoc("sa1", "leads/P1"), { assignedTo: "T1", takenBy: "T1", status: "Assistant Handling", aiHandoff: true }));
+    await assertFails(updateDoc(wsDoc("sa2", "leads/P1"), { assignedTo: "T2", takenBy: "T2", status: "Assistant Handling" }));
+    await assertFails(getDoc(wsDoc("sa2", "leads/P1")));
+  });
+
+  it("transactional take: the first wins, a late take is refused even without a client check", async () => {
+    await seed();
+    const take = (uid: string, team: string, check = true) => {
+      const f = db(uid);
+      return runTransaction(f, async (tx) => {
+      const ref = doc(f, `users/${WS}/leads/P1`);
+      const cur = await tx.get(ref);
+      if (check && cur.data()?.assignedTo) throw new Error("taken");
+      tx.update(ref, { assignedTo: team, takenBy: team, status: "Assistant Handling" });
+      });
+    };
+    await assertSucceeds(take("sa1", "T1"));
+    await assertFails(take("sa2", "T2", false));
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      const d = await getDoc(doc(ctx.firestore(), `users/${WS}/leads/P1`));
+      if (d.data()?.assignedTo !== "T1") throw new Error("lead should stay with T1");
+    });
+    // both at once: never two owners
+    await seed();
+    const r = await Promise.allSettled([take("sa1", "T1"), take("sa2", "T2")]);
+    if (r.filter((x) => x.status === "fulfilled").length > 1) throw new Error("two assistants took the same lead");
+  });
+
+  it("works on own lead, cannot give it to someone else; cannot change another's lead", async () => {
+    await seed();
+    await assertSucceeds(updateDoc(wsDoc("sa1", "leads/M1"), { status: "Demo Scheduled", demoAt: "2026-10-08T15:00" }));
+    await assertSucceeds(updateDoc(wsDoc("sa1", "leads/M1"), { assignedTo: "" }));
+    await assertFails(updateDoc(wsDoc("sa1", "leads/O2"), { status: "Lost" }));
+    await assertFails(updateDoc(wsDoc("sa1", "leads/P1"), { assignedTo: "T2", takenBy: "T2" }));
+  });
+
+  it("can add captured messages to another's lead (write-only) and create new leads", async () => {
+    await seed();
+    await assertSucceeds(updateDoc(wsDoc("sa1", "leads/O2"), { chat: arrayUnion({ text: "hi", fromMe: false, at: 1 }), lastMessageAt: "2026-10-07T10:00:00Z", updatedAt: "x" }));
+    await assertFails(updateDoc(wsDoc("sa1", "leads/O2"), { chat: arrayUnion({ text: "x", fromMe: false }), status: "Lost" }));
+    await assertSucceeds(getDoc(wsDoc("sa1", "leadPhoneIndex/923001112222")));
+    await assertSucceeds(setDoc(wsDoc("sa1", "leads/N1"), { id: "N1", name: "New", status: "New", assignedTo: "" }));
+    await assertSucceeds(setDoc(wsDoc("sa1", "leadPhoneIndex/923005556666"), { leadId: "N1", phone: "923005556666" }));
+    await assertSucceeds(setDoc(wsDoc("sa1", "salesState/roundrobin"), { id: "roundrobin", lastTeamId: "T2" }));
+    await assertFails(deleteDoc(wsDoc("sa1", "leads/M1")));
+  });
+
+  it("CEO / admin sees and reassigns everything", async () => {
+    await seed();
+    await assertSucceeds(getDocs(collection(db("admin"), `users/${WS}/leads`)));
+    await assertSucceeds(updateDoc(wsDoc("admin", "leads/O2"), { assignedTo: "T1", assignedToName: "Designer One" }));
+    await assertSucceeds(updateDoc(wsDoc("assigner", "leads/O2"), { assignedTo: "T2", assignedToName: "Editor Two", status: "Assigned", takenBy: "", takenAt: "" }));
   });
 });

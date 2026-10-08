@@ -31,6 +31,16 @@
       "label": "Assign Leads"
     },
     {
+      "key": "leads.own",
+      "group": "Leads",
+      "label": "Own & unassigned leads only (sales assistant)"
+    },
+    {
+      "key": "leads.take",
+      "group": "Leads",
+      "label": "Take Lead (sales assistant)"
+    },
+    {
       "key": "whatsapp.view",
       "group": "WhatsApp",
       "label": "WhatsApp Access (read inbox)"
@@ -183,6 +193,10 @@
       "label": "Lead Manager"
     },
     {
+      "value": "sales_assistant",
+      "label": "Sales Assistant"
+    },
+    {
       "value": "sales_support",
       "label": "Sales / Support"
     },
@@ -245,7 +259,8 @@
       "settings.manage",
       "data.manage",
       "performance.view",
-      "campaigns.manage"
+      "campaigns.manage",
+      "leads.take"
     ],
     "lead_manager": [
       "leads.view",
@@ -259,7 +274,8 @@
       "schedule.manage",
       "queries.manage",
       "performance.view",
-      "campaigns.manage"
+      "campaigns.manage",
+      "leads.take"
     ],
     "sales_support": [
       "leads.view",
@@ -304,7 +320,13 @@
     "team_member": [
       "myportal.view"
     ],
-    "custom": []
+    "custom": [],
+    "sales_assistant": [
+      "leads.own",
+      "leads.take",
+      "schedule.view",
+      "schedule.manage"
+    ]
   },
   "collectionRead": {
     "clients": [
@@ -368,6 +390,7 @@
       "leads.view"
     ],
     "leadPhoneIndex": [
+      "leads.own",
       "leads.view",
       "whatsapp.view"
     ],
@@ -400,6 +423,10 @@
       "campaigns.manage",
       "leads.view",
       "whatsapp.view"
+    ],
+    "salesState": [
+      "leads.view",
+      "leads.own"
     ]
   },
   "collectionWrite": {
@@ -454,7 +481,8 @@
     ],
     "leadPhoneIndex": [
       "leads.create",
-      "leads.edit"
+      "leads.edit",
+      "leads.own"
     ],
     "targets": [
       "finance.manage"
@@ -472,6 +500,10 @@
       "campaigns.manage",
       "leads.edit",
       "whatsapp.reply"
+    ],
+    "salesState": [
+      "leads.create",
+      "leads.own"
     ]
   },
   "ownScoped": {

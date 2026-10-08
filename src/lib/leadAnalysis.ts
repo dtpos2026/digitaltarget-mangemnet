@@ -99,10 +99,11 @@ export function adsSignal(lines: ChatLine[], meta?: { ad?: boolean }): boolean {
 }
 const looksLikeNumber = (s?: string) => !s || /^\+?[\d\s()-]{7,}$/.test(s.trim());
 
-export function leadTypeOf(lead: { source?: string; name?: string }, lines: ChatLine[]): LeadType {
+export function leadTypeOf(lead: { source?: string; name?: string; waSaved?: boolean }, lines: ChatLine[]): LeadType {
   if (ADS_SOURCE.test(String(lead.source || "")) || adsSignal(lines)) return "ads";
-  if (looksLikeNumber(lead.name)) return "unsaved";
-  if (/whatsapp/i.test(String(lead.source || ""))) return "saved";
+  // waSaved = what WhatsApp said at capture (a WhatsApp profile name alone does not mean a saved contact)
+  if (lead.waSaved === false || looksLikeNumber(lead.name)) return "unsaved";
+  if (lead.waSaved || /whatsapp/i.test(String(lead.source || ""))) return "saved";
   return "other";
 }
 
@@ -122,7 +123,10 @@ export function budgetFromChat(lines: ChatLine[]): number {
 const BASE: Record<string, number> = {
   New: 30, Contacted: 35, Interested: 60, "Follow-up": 50, Qualified: 65, Proposal: 70, "Meeting Scheduled": 70,
   "Demo Given": 70, Negotiation: 75, Converted: 100, Lost: 5, Invalid: 0,
+  "Demo Scheduled": 75, Hot: 75, Warm: 50, Cold: 20,
 };
+// Who-is-handling-it statuses say nothing about interest: the chat itself decides.
+const HANDLING = new Set(["Assigned", "AI Handling", "Assistant Handling"]);
 const PRICE_ASK = /\b(price|rate|rates|kitne|kitna|charges|cost|package|fee|quotation|quote)\b/i;
 const DEMO_ASK = /\b(demo|meeting|milna|visit|call (karein|kr|karo)|sample|portfolio)\b/i;
 const LATER = /\b(baad mein|bad me|baad me|sochta|soch k|later|next week|agle hafte)\b/i;
@@ -148,7 +152,8 @@ export function analyzeLead(lead: any, settings: unknown, today = new Date()): L
   const current = lead.status || "New";
   const suggestedStatus = optOut ? "Lost" : shouldMoveStatus(current, cls.status) ? cls.status : current;
 
-  let interest = BASE[suggestedStatus] ?? 30;
+  const basis = HANDLING.has(suggestedStatus) ? (BASE[cls.status] !== undefined ? cls.status : "New") : suggestedStatus;
+  let interest = BASE[basis] ?? 30;
   if (PRICE_ASK.test(theirText)) interest += 10;
   if (budgetFromChat(lines) > 0) interest += 10;
   if (DEMO_ASK.test(theirText)) interest += 10;
@@ -242,7 +247,8 @@ export function applyAnalysis(lead: any, ai: LeadAI, opts: { moveStatus?: boolea
     next.priority = ai.brief.priority;
     if (ai.brief.business && !lead.business) next.business = ai.brief.business;
   }
-  if (!lead.followUpDate && ai.followUp.required) { next.followUpDate = ai.followUp.date; changes.push(`follow-up ${ai.followUp.date}`); }
+  // An AI-suggested date is only a hint (followUpAuto): reminders are for follow-ups a person sets.
+  if (!lead.followUpDate && ai.followUp.required) { next.followUpDate = ai.followUp.date; next.followUpAuto = true; changes.push(`follow-up ${ai.followUp.date}`); }
   next = withHistory(next, { type: "ai", text: `AI: ${ai.level} (${ai.interest}%)${ai.line ? ` • ${ai.line}` : ""}${changes.length ? ` • ${changes.join(", ")}` : ""}`, by: opts.by });
   return next;
 }

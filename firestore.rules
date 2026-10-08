@@ -34,10 +34,10 @@ service cloud.firestore {
 
     // GENERATED:BEGIN
     function superRoles() { return ["super_admin", "admin"]; }
-    function allPermissions() { return ["dashboard.view", "leads.view", "leads.create", "leads.edit", "leads.delete", "leads.assign", "whatsapp.view", "whatsapp.reply", "whatsapp.manage", "campaigns.manage", "clients.view", "clients.manage", "projects.view", "projects.manage", "assignments.manage", "schedule.view", "schedule.manage", "queries.manage", "myportal.view", "invoices.view", "invoices.manage", "finance.view", "finance.manage", "reports.view", "performance.view", "team.view", "team.manage", "users.manage", "settings.manage", "audit.view", "data.manage", "history.manage"]; }
+    function allPermissions() { return ["dashboard.view", "leads.view", "leads.create", "leads.edit", "leads.delete", "leads.assign", "leads.own", "leads.take", "whatsapp.view", "whatsapp.reply", "whatsapp.manage", "campaigns.manage", "clients.view", "clients.manage", "projects.view", "projects.manage", "assignments.manage", "schedule.view", "schedule.manage", "queries.manage", "myportal.view", "invoices.view", "invoices.manage", "finance.view", "finance.manage", "reports.view", "performance.view", "team.view", "team.manage", "users.manage", "settings.manage", "audit.view", "data.manage", "history.manage"]; }
     function presets() { return {
-      "manager": ["dashboard.view", "leads.view", "leads.create", "leads.edit", "leads.delete", "leads.assign", "whatsapp.view", "whatsapp.reply", "whatsapp.manage", "clients.view", "clients.manage", "projects.view", "projects.manage", "assignments.manage", "schedule.view", "schedule.manage", "queries.manage", "myportal.view", "invoices.view", "invoices.manage", "finance.view", "finance.manage", "reports.view", "team.view", "team.manage", "settings.manage", "data.manage", "performance.view", "campaigns.manage"],
-      "lead_manager": ["leads.view", "leads.create", "leads.edit", "leads.delete", "leads.assign", "whatsapp.view", "whatsapp.reply", "schedule.view", "schedule.manage", "queries.manage", "performance.view", "campaigns.manage"],
+      "manager": ["dashboard.view", "leads.view", "leads.create", "leads.edit", "leads.delete", "leads.assign", "whatsapp.view", "whatsapp.reply", "whatsapp.manage", "clients.view", "clients.manage", "projects.view", "projects.manage", "assignments.manage", "schedule.view", "schedule.manage", "queries.manage", "myportal.view", "invoices.view", "invoices.manage", "finance.view", "finance.manage", "reports.view", "team.view", "team.manage", "settings.manage", "data.manage", "performance.view", "campaigns.manage", "leads.take"],
+      "lead_manager": ["leads.view", "leads.create", "leads.edit", "leads.delete", "leads.assign", "whatsapp.view", "whatsapp.reply", "schedule.view", "schedule.manage", "queries.manage", "performance.view", "campaigns.manage", "leads.take"],
       "sales_support": ["leads.view", "leads.create", "leads.edit", "whatsapp.view", "whatsapp.reply", "clients.view", "schedule.view", "schedule.manage"],
       "accountant": ["dashboard.view", "invoices.view", "invoices.manage", "finance.view", "finance.manage", "reports.view"],
       "social_media_manager": ["leads.view", "whatsapp.view", "whatsapp.reply", "clients.view", "projects.view", "schedule.view", "myportal.view"],
@@ -45,7 +45,8 @@ service cloud.firestore {
       "video_editor": ["myportal.view"],
       "assistant": ["leads.view", "leads.create", "leads.edit", "schedule.view", "schedule.manage"],
       "team_member": ["myportal.view"],
-      "custom": []
+      "custom": [],
+      "sales_assistant": ["leads.own", "leads.take", "schedule.view", "schedule.manage"]
     }; }
     function readPerms(col) { return {
       "clients": ["clients.view", "leads.view", "invoices.view", "finance.view", "projects.view", "schedule.view"],
@@ -61,7 +62,7 @@ service cloud.firestore {
       "payouts": ["team.view", "finance.view"],
       "schedule": ["schedule.view", "dashboard.view"],
       "leads": ["leads.view"],
-      "leadPhoneIndex": ["leads.view", "whatsapp.view"],
+      "leadPhoneIndex": ["leads.own", "leads.view", "whatsapp.view"],
       "assignments": ["assignments.manage", "team.view"],
       "queries": ["queries.manage"],
       "waStats": ["performance.view", "whatsapp.view"],
@@ -69,7 +70,8 @@ service cloud.firestore {
       "monthlyArchives": ["history.manage"],
       "waCampaigns": ["campaigns.manage"],
       "waDailyCounts": ["campaigns.manage"],
-      "optOuts": ["campaigns.manage", "leads.view", "whatsapp.view"]
+      "optOuts": ["campaigns.manage", "leads.view", "whatsapp.view"],
+      "salesState": ["leads.view", "leads.own"]
     }.get(col, []); }
     function writePerms(col) { return {
       "clients": ["clients.manage", "leads.edit"],
@@ -86,12 +88,13 @@ service cloud.firestore {
       "schedule": ["schedule.manage"],
       "assignments": ["assignments.manage", "team.manage"],
       "queries": ["queries.manage"],
-      "leadPhoneIndex": ["leads.create", "leads.edit"],
+      "leadPhoneIndex": ["leads.create", "leads.edit", "leads.own"],
       "targets": ["finance.manage"],
       "monthlyArchives": ["history.manage"],
       "waCampaigns": ["campaigns.manage"],
       "waDailyCounts": ["campaigns.manage"],
-      "optOuts": ["campaigns.manage", "leads.edit", "whatsapp.reply"]
+      "optOuts": ["campaigns.manage", "leads.edit", "whatsapp.reply"],
+      "salesState": ["leads.create", "leads.own"]
     }.get(col, []); }
     // GENERATED:END
 
@@ -164,12 +167,38 @@ service cloud.firestore {
     }
 
     // Leads: separate create / edit / assign / delete permissions.
+    // Sales assistants (leads.own) see only their own leads and the open pool
+    // (unassigned); they can TAKE a pool lead, work on their own leads, and —
+    // because their WhatsApp may be the one that captures the message — add
+    // new conversation data to any lead without seeing it.
+    // Read: only documents whose assignedTo is mine or '' (legacy leads without
+    // the field are not part of the pool). Queries must filter on assignedTo.
+    function salesRead(p, team) {
+      return p.hasAny(['leads.own']) && team != ''
+        && (resource.data.assignedTo == team || resource.data.assignedTo == '');
+    }
+    // Permissions are worked out once (permsOf) and passed in.
+    function leadUpdate(p, team) {
+      let owner = resource.data.get('assignedTo', '');
+      let nextOwner = request.resource.data.get('assignedTo', '');
+      let sa = p.hasAny(['leads.own']) && team != '';
+      return p.hasAny(['leads.edit'])
+        // assign / reassign (status only to Assigned / New)
+        || (p.hasAny(['leads.assign'])
+            && changed().hasOnly(['assignedTo', 'assignedToName', 'assignedAt', 'assignedBy', 'takenBy', 'takenByName', 'takenAt', 'status', 'history', 'updatedAt', 'updatedBy'])
+            && (!('status' in changed()) || request.resource.data.status in ['Assigned', 'New']))
+        // own lead: work on it, or hand it back to the pool
+        || (sa && owner == team && (nextOwner == team || nextOwner == ''))
+        // TAKE LEAD from the pool (first one wins: the second sees an owner and is refused)
+        || (sa && p.hasAny(['leads.take']) && owner == '' && nextOwner == team && request.resource.data.get('takenBy', '') == team)
+        // captured WhatsApp messages / analysis on any lead (write-only)
+        || (sa && changed().hasOnly(['chat', 'lastMessageAt', 'lastMessageText', 'lastInboundAt', 'unreadCount',
+              'history', 'ai', 'interest', 'leadType', 'adInfo', 'waJid', 'phoneE164', 'waLabels', 'vip', 'priority', 'business', 'updatedAt']));
+    }
     match /users/{ws}/leads/{id} {
-      allow create: if member(ws) && canAny(['leads.create']);
-      allow update: if member(ws) && (
-        canAny(['leads.edit']) ||
-        (canAny(['leads.assign']) && changed().hasOnly(['assignedTo', 'assignedToName', 'assignedAt', 'updatedAt', 'updatedBy']))
-      );
+      allow read: if member(ws) && salesRead(permsOf(me()), myTeamId());
+      allow create: if member(ws) && (canAny(['leads.create']) || (canAny(['leads.own']) && myTeamId() != ''));
+      allow update: if member(ws) && leadUpdate(permsOf(me()), myTeamId());
       allow delete: if member(ws) && canAny(['leads.delete']);
     }
 

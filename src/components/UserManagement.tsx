@@ -89,6 +89,7 @@ export default function UserManagement() {
 
   const visibleUsers = useMemo(() => users.filter((u) => showDisabled || !u.disabled), [users, showDisabled]);
 
+  const [linking, setLinking] = useState<RoleDoc | null>(null);
   if (!canManage) return null;
 
   const onNewRole = (r: string) => {
@@ -134,7 +135,6 @@ export default function UserManagement() {
     }
   };
 
-  const [linking, setLinking] = useState<RoleDoc | null>(null);
   const editable = (u: RoleDoc) => u.uid !== user?.uid && (isAdmin || !isSuperRole(u.role));
 
   const handleChangeRole = async (u: RoleDoc, role: string) => {

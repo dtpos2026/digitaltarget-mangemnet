@@ -8,6 +8,7 @@ small Node service that links the business WhatsApp number (QR / linked device).
 | [docs/AUDIT_REPORT.md](docs/AUDIT_REPORT.md) | Phase 1 audit of the original system |
 | [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) | **Deploy order**, rules, account clean-up, rollback |
 | [docs/WHATSAPP.md](docs/WHATSAPP.md) | WhatsApp link: risks, how it works, service deploy, troubleshooting |
+| [docs/SALES_SYSTEM.md](docs/SALES_SYSTEM.md) | WhatsApp leads → Sales tab: auto-capture, TAKE LEAD, follow-ups, dashboard, setup |
 
 ## Architecture
 

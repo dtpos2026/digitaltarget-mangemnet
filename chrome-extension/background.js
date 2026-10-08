@@ -59,15 +59,21 @@ async function toPortals(msg, onlyTab) {
   return delivered;
 }
 
-async function openWindow() {
-  const tabs = await chrome.tabs.query({ url: WA_URL + "*" });
-  if (tabs.length) {
-    await chrome.windows.update(tabs[0].windowId, { focused: true });
-    await chrome.tabs.update(tabs[0].id, { active: true });
-    return { reused: true };
-  }
-  await chrome.windows.create({ url: WA_URL, type: "popup", width: 1180, height: 820, focused: true });
-  return { reused: false };
+// Two quick requests (e.g. two portal tabs) must not open two WhatsApp windows.
+let opening = null;
+function openWindow() {
+  if (opening) return opening;
+  opening = (async () => {
+    const tabs = await chrome.tabs.query({ url: WA_URL + "*" });
+    if (tabs.length) {
+      await chrome.windows.update(tabs[0].windowId, { focused: true });
+      await chrome.tabs.update(tabs[0].id, { active: true });
+      return { reused: true };
+    }
+    await chrome.windows.create({ url: WA_URL, type: "popup", width: 1180, height: 820, focused: true });
+    return { reused: false };
+  })().finally(() => setTimeout(() => { opening = null; }, 3000));
+  return opening;
 }
 
 async function handle(msg, sender) {

@@ -4,6 +4,7 @@ import { uid, todayISO, fmtMoney } from "@/lib/db";
 import { saveReportImage, printElementHTML } from "@/lib/exportUtils";
 import { leadPhones, normalizePhone, waLink } from "@/lib/phone";
 import { LEAD_STATUSES } from "@/lib/leads";
+import { LEAD_SOURCES, statusLabel } from "@/lib/salesPipeline";
 import { linesOf } from "@/lib/catalog";
 import { navigate } from "@/lib/navigation";
 import { extensionVersion } from "@/lib/waExtension";
@@ -27,7 +28,7 @@ export default function LeadsTab() {
   const [software, setSoftware] = useState("POS Software");
   const [plan, setPlan] = useState("Undecided");
   const [status, setStatus] = useState("New");
-  const [source, setSource] = useState("WhatsApp");
+  const [source, setSource] = useState("Manual");
   const [referralBy, setReferralBy] = useState("");
   const [meetingDate, setMeetingDate] = useState("");
   const [followUpDate, setFollowUpDate] = useState("");
@@ -55,7 +56,7 @@ export default function LeadsTab() {
   const softwareOptions = ["POS Software","Management Software","Automation Software","Billing/Invoicing","Custom Solution","None","Other"];
   const planOptions = ["Monthly","Yearly","Lifetime","One-time","Undecided"];
   const statusOptions = LEAD_STATUSES;
-  const sourceOptions = ["WhatsApp","Facebook","Instagram","TikTok","Google","Referral","Walk-in","Website","Cold Call","Other"];
+  const sourceOptions = [...LEAD_SOURCES, "WhatsApp", "TikTok", "Google", "Walk-in", "Cold Call", "Other"];
 
   const clearForm = () => {
     setEditId(null);
@@ -83,6 +84,7 @@ export default function LeadsTab() {
       // Keep the original creation date (it used to be overwritten on every edit).
       if (old) {
         let next: any = { ...old, ...payload, date: old.date || todayISO(), updatedAt: new Date().toISOString() };
+        if (old.followUpDate !== payload.followUpDate) next.followUpAuto = false; // set by a person → reminder
         if (old.status !== payload.status) next = withHistory(next, { type: "status", text: `${old.status || "New"} → ${payload.status}`, by: user?.email || "" });
         await updateItem("leads", next);
       }
@@ -289,7 +291,7 @@ export default function LeadsTab() {
         </div>
         <div><label>Status</label>
           <select value={status} onChange={(e) => setStatus(e.target.value)}>
-            {statusOptions.map(s => <option key={s}>{s}</option>)}
+            {statusOptions.map(s => <option key={s} value={s}>{statusLabel(s)}</option>)}
           </select>
         </div>
       </div>
@@ -345,7 +347,7 @@ export default function LeadsTab() {
         </select>
         <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} aria-label="Status">
           <option value="ALL">Sab status</option>
-          {statusOptions.map(s => <option key={s}>{s}</option>)}
+          {statusOptions.map(s => <option key={s} value={s}>{statusLabel(s)}</option>)}
         </select>
         <select value={filterType} onChange={(e) => setFilterType(e.target.value as typeof filterType)} aria-label="Lead type">
           <option value="ALL">Sab lead types</option>
@@ -398,9 +400,9 @@ export default function LeadsTab() {
                   </td>
                   <td>{l.serviceType || l.software || <span className="small">—</span>}<div className="small">{l.category || ""}</div></td>
                   <td>
-                    <span className={`badge ${stClass}`}>{l.status}</span>
+                    <span className={`badge ${stClass}`}>{statusLabel(l.status)}</span>
                     <select value={l.status} onChange={(e) => changeStatus(l, e.target.value)} style={{ marginTop: 4, minWidth: 110 }} aria-label="Change status">
-                      {[...new Set([...statusOptions, l.status])].map(s => <option key={s}>{s}</option>)}
+                      {[...new Set([...statusOptions, l.status])].map(s => <option key={s} value={s}>{statusLabel(s)}</option>)}
                     </select>
                   </td>
                   {inlineAI && <td className="leadAI">

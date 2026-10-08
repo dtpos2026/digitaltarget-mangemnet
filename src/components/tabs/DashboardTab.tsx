@@ -10,6 +10,7 @@ import BusinessOverview from "@/components/BusinessOverview";
 import { summarize } from "@/lib/finance";
 import { invoiceView } from "@/lib/invoice";
 import { useInlineAI } from "@/lib/inlineAI";
+import { isWhatsAppLead } from "@/lib/salesPipeline";
 
 function useChart(drawFn: (canvas: HTMLCanvasElement) => void) {
   const ref = useRef<HTMLCanvasElement>(null);
@@ -132,7 +133,7 @@ export default function DashboardTab() {
     return {
       total: leads.length,
       today: leads.filter((l) => l.date === todayISO()).length,
-      whatsapp: leads.filter((l) => l.source === "WhatsApp").length,
+      whatsapp: leads.filter(isWhatsAppLead).length,
       pipeline: leads.filter((l) => !["Converted", "Lost", "Invalid", "New"].includes(l.status)).length,
       converted,
       rate: leads.length ? Math.round((converted / leads.length) * 100) : 0,

@@ -19,7 +19,7 @@ export interface WaExtChat {
   isBusiness?: boolean;
   labels?: string[];
 }
-export interface WaExtMessage { id: string; fromMe: boolean; type: string; t: number; text: string; remote?: string; ack?: number; ad?: boolean }
+export interface WaExtMessage { id: string; fromMe: boolean; type: string; t: number; text: string; remote?: string; ack?: number; ad?: boolean; adInfo?: { title?: string; body?: string; sourceUrl?: string; sourceId?: string; sourceType?: string; ctwaClid?: string } }
 export interface WaExtState {
   ready: boolean;
   authenticated: boolean;
@@ -89,6 +89,8 @@ export const waExt = {
   chats: (a: { sinceDays?: number; max?: number; onlyUnread?: boolean } = {}) => extCall<WaExtChat[]>("chats", a, 180000),
   messages: (chatId: string, count = 40) => extCall<WaExtMessage[]>("messages", { chatId, count }),
   active: () => extCall<(WaExtChat & { messages: WaExtMessage[] }) | null>("active"),
+  /** One chat's details (name, number, labels) — Fast mode only. */
+  chatInfo: (chatId: string) => extCall<WaExtChat | null>("chatInfo", { chatId }, 15000),
   open: (a: { phone?: string; chatId?: string; text?: string }) => extCall<boolean>("open", a),
   sendText: (a: { phone?: string; chatId?: string; text: string }) => extCall<{ id: string }>("sendText", a),
   sendFile: (a: { phone?: string; chatId?: string; dataUrl: string; filename: string; caption?: string }) =>

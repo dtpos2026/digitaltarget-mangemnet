@@ -153,6 +153,7 @@ export function buildRecipients(
     else if (l.optOut || optOuts.has(phone)) reason = "Opt-out — message band karne ko kaha tha";
     else if (seen.has(phone)) reason = "Duplicate number";
     else if (["Lost", "Invalid"].includes(l.status)) reason = `Status ${l.status}`;
+    else if (l.aiHandoff && l.assignedTo) reason = `Assistant (${l.takenByName || l.assignedToName || "team"}) handle kar raha hai — automation band`;
     if (phone) seen.add(phone);
     return reason ? { ...base, status: "skipped" as const, reason } : { ...base, status: "queued" as const };
   });

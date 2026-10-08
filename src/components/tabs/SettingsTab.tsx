@@ -7,6 +7,7 @@ import ServiceCatalog from "@/components/ServiceCatalog";
 import FinanceSettings from "@/components/FinanceSettings";
 import WaTemplateSettings from "@/components/WaTemplateSettings";
 import { AiKnowledge } from "@/components/AiReplyTraining";
+import SalesSettings from "@/components/sales/SalesSettings";
 import { DEFAULT_INVOICE_PREFIX, DEFAULT_TERMS } from "@/lib/invoice";
 import { useAuth } from "@/contexts/AuthContext";
 
@@ -117,6 +118,7 @@ export default function SettingsTab() {
 
       <ServiceCatalog />
       <FinanceSettings />
+      <SalesSettings />
       <WaTemplateSettings />
       <section className="card"><h2 style={{ marginTop: 0 }}>📚 AI Reply Training</h2><AiKnowledge /></section>
       <UserManagement />

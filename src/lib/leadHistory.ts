@@ -2,14 +2,17 @@
 
 export interface LeadEvent {
   at: string;
-  type: "created" | "captured" | "status" | "ai" | "message" | "reply" | "assigned" | "followup" | "note" | "converted" | "optout";
+  type: "created" | "captured" | "status" | "ai" | "message" | "reply" | "assigned" | "followup" | "note" | "converted" | "optout"
+    | "taken" | "followup_done" | "demo" | "quotation" | "lost" | "handoff";
   text: string;
   by?: string;
+  /** For status changes: the new status (daily numbers read this). */
+  to?: string;
 }
 
 /** Appends to the lead's history (kept to the last 80 events). */
 export function withHistory<T extends object>(lead: T, ev: Omit<LeadEvent, "at"> & { at?: string }): T & { history: LeadEvent[] } {
-  const entry: LeadEvent = { at: ev.at || new Date().toISOString(), type: ev.type, text: ev.text.slice(0, 400), ...(ev.by ? { by: ev.by } : {}) };
+  const entry: LeadEvent = { at: ev.at || new Date().toISOString(), type: ev.type, text: ev.text.slice(0, 400), ...(ev.by ? { by: ev.by } : {}), ...(ev.to ? { to: ev.to } : {}) };
   const prev = (lead as { history?: unknown }).history;
-  return { ...lead, history: [...(Array.isArray(prev) ? (prev as LeadEvent[]) : []), entry].slice(-80) };
+  return { ...lead, history: [...(Array.isArray(prev) ? (prev as LeadEvent[]) : []), entry].slice(-120) };
 }

@@ -4,6 +4,7 @@
 import { analyzeBusiness, Insight, Severity } from "./insights";
 import { invoiceView } from "./invoice";
 import { isLateProject } from "./db";
+import { isWhatsAppLead } from "./salesPipeline";
 
 export type ModuleKey = "dashboard" | "leads" | "whatsapp" | "clients" | "projects" | "assignments" | "invoices" | "finance" | "team";
 
@@ -44,7 +45,7 @@ const fromBusiness = (i: Insight): ModuleInsight => ({ id: i.id, severity: i.sev
 const leadDate = (l: any) => String(l.date || l.createdAt || "").slice(0, 10);
 
 function leadsModule(data: any, today: Date, onlyWhatsApp: boolean): ModuleAnalysis {
-  const all: any[] = (data.leads || []).filter((l: any) => !onlyWhatsApp || l.source === "WhatsApp");
+  const all: any[] = (data.leads || []).filter((l: any) => !onlyWhatsApp || isWhatsAppLead(l));
   const t = iso(today);
   const monthStart = t.slice(0, 8) + "01";
   const lastMonthStart = iso(new Date(today.getFullYear(), today.getMonth() - 1, 1));

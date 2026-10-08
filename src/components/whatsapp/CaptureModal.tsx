@@ -163,11 +163,11 @@ export default function CaptureModal({ source, onClose }: { source: CaptureSourc
       const phone = i.chat.phone ? formatLocalPhone(i.chat.phone) : "";
       const ls = i.lines || [];
       try {
-        const extra = { waLabels: i.meta.labels || [], adsLead: i.a.kind === "ads" };
+        const extra = { waLabels: i.meta.labels || [], adsLead: i.a.kind === "ads", ...(i.meta.saved !== undefined ? { waSaved: !!i.meta.saved } : {}) };
         if (i.action === "new") {
           const plan = planCapture(i.chat, ls, [], { updateExisting: false, newId: () => uid("LD"), today: todayISO(), createdBy: by });
           if (plan.kind !== "create") throw new Error("Lead nahi ban saki");
-          let lead: LeadLike = { ...plan.lead, ...extra, source: i.a.kind === "ads" ? "Facebook" : "WhatsApp" };
+          let lead: LeadLike = { ...plan.lead, ...extra, source: i.a.kind === "ads" ? "Meta Ads" : "WhatsApp Direct" };
           if (i.a.group) lead.category = i.a.group;
           lead = applyAnalysis(lead, analyzeLead(lead, data.settings), { moveStatus: false, by });
           await addItem("leads", lead);

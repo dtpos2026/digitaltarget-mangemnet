@@ -6,6 +6,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useData } from "@/contexts/DataContext";
 import { todayISO } from "@/lib/db";
 import { durationLabel, WaConversation } from "@/components/whatsapp/useWhatsApp";
+import { isWhatsAppLead } from "@/lib/salesPipeline";
 
 // Chart colours validated (dataviz validator) against light #fcfcfb and dark #171124 surfaces.
 const SERIES = { light: { received: "#5B21B6", sent: "#16A34A" }, dark: { received: "#8B5CF6", sent: "#16A34A" } };
@@ -191,7 +192,7 @@ export default function PerformanceTab() {
         </div>
         <div className="kpis" style={{ marginTop: 12 }}>
           <div className="kpi"><div className="t">Leads (all sources)</div><div className="v">{leads.length}</div></div>
-          <div className="kpi"><div className="t">WhatsApp leads</div><div className="v">{leads.filter((l: any) => l.source === "WhatsApp").length}</div></div>
+          <div className="kpi"><div className="t">WhatsApp leads</div><div className="v">{leads.filter(isWhatsAppLead).length}</div></div>
           <div className="kpi"><div className="t">Qualified +</div><div className="v">{qualifiedPlus}</div></div>
           <div className="kpi"><div className="t">Converted</div><div className="v">{converted}</div></div>
           <div className="kpi"><div className="t">Conversion rate</div><div className="v">{pct(converted, leads.length)}%</div></div>

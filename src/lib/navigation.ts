@@ -12,6 +12,8 @@ export interface NavDetail {
   view?: string;
   /** Leads to pre-select (Message Center). */
   leadIds?: string[];
+  /** Sales tab: open this lead. */
+  openLead?: string;
 }
 
 const EVENT = "dt:navigate";

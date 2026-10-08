@@ -4,6 +4,7 @@ import { useData } from "@/contexts/DataContext";
 import { uid, todayISO } from "@/lib/db";
 import { classifyChat } from "@/lib/chatClassifier";
 import { findLeadForChat, planCapture } from "@/lib/leadCapture";
+import { mergeChat } from "@/lib/leadIngest";
 import { analyzeLead, applyAnalysis } from "@/lib/leadAnalysis";
 import { LEAD_STATUSES } from "@/lib/leads";
 import { linesOf } from "@/lib/catalog";
@@ -156,7 +157,9 @@ export default function WaWebView({ openPhone }: { openPhone?: { phone: string; 
   const liveBrief = active && chatLines.length
     ? analyzeLead({ ...(lead || {}), name: lead?.name || active.name || active.pushname, status: lead?.status || "New", source: lead?.source || "WhatsApp", chat: chatLines.slice(-30), date: lead?.date || todayISO() }, data.settings).brief
     : null;
-  const draft = active && chatLines.length
+  // AI handoff: once an assistant took the lead, no AI drafts for this chat.
+  const handedOff = !!lead?.aiHandoff;
+  const draft = active && chatLines.length && !handedOff
     ? draftReply(chatLines, { settings: data.settings, name: lead?.name || active.name || active.pushname, kb: data.settings?.aiKnowledge, company: data.settings?.companyName })
     : null;
 
@@ -170,13 +173,15 @@ export default function WaWebView({ openPhone }: { openPhone?: { phone: string; 
         data.leads,
         { updateExisting: true, newId: () => uid("LD"), today: todayISO(), createdBy: user?.uid || "whatsapp-web" }
       );
-      const lines = active.messages.filter((m) => m.type !== "call_log").map((m) => ({ text: m.text, fromMe: m.fromMe }));
+      // Keep message ids / times so the auto-captured conversation is extended, never cut to 20 lines.
+      const msgs = active.messages.filter((m) => m.type !== "call_log" && m.text).map((m) => ({ id: m.id, text: m.text, fromMe: m.fromMe, at: m.t || 0 }));
       if (plan.kind === "create") {
-        const lead = applyAnalysis(plan.lead, analyzeLead(plan.lead, data.settings), { moveStatus: false, by: user?.email || "" });
+        const base = { ...plan.lead, chat: mergeChat([], msgs), waSaved: !!active.saved };
+        const lead = applyAnalysis(base, analyzeLead(base, data.settings), { moveStatus: false, by: user?.email || "" });
         await addItem("leads", lead);
         setNote(`✓ Nayi lead bani: ${lead.name} (${lead.serviceType} • ${lead.status} • ${lead.ai.level} ${lead.ai.interest}%)`);
       } else {
-        const merged = { ...plan.lead, ...(plan.kind === "update" ? plan.patch : {}), chat: lines.slice(-20), updatedAt: new Date().toISOString() };
+        const merged = { ...plan.lead, ...(plan.kind === "update" ? plan.patch : {}), chat: mergeChat(Array.isArray(plan.lead.chat) ? plan.lead.chat : [], msgs), updatedAt: new Date().toISOString() };
         await updateItem("leads", applyAnalysis(merged, analyzeLead(merged, data.settings), { by: user?.email || "" }));
         setNote(plan.kind === "update" ? "✓ Lead update ho gayi (AI analysis ke sath)" : "✓ AI analysis update ho gaya");
       }
@@ -291,6 +296,7 @@ export default function WaWebView({ openPhone }: { openPhone?: { phone: string; 
               {(canLead || can("leads.edit")) && (
                 <button className="btnSmall" disabled={busy === "lead"} onClick={saveActive}>{lead ? "↻ Chat se lead update karein" : "＋ Lead save karein"}</button>
               )}
+              {handedOff && <div className="aiSuggest small">👤 <b>{lead?.takenByName || lead?.assignedToName}</b> ye chat handle kar raha hai — AI reply band (handoff).</div>}
               {draft && (
                 <div className="aiSuggest small">
                   <span>🤖 AI reply draft • {draft.source === "trained" ? "aap ka sikhaya hua" : draft.source === "catalog" ? "catalog se" : draft.source === "default" ? "aam jawab" : "—"}</span>

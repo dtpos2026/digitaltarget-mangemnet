@@ -11,7 +11,8 @@ interface Notif {
   body: string;
   read: boolean;
   createdAt: string;
-  link?: { tab: string; conversationId?: string; leadId?: string };
+  link?: { tab: string; conversationId?: string; leadId?: string; openLead?: string };
+  lead?: { name?: string; business?: string; phone?: string; temperature?: string; source?: string; at?: string; assignedToName?: string };
 }
 
 /** In-app notifications (users/{ws}/notifications, one doc per recipient) + browser notifications. */
@@ -87,8 +88,15 @@ export default function NotificationBell() {
           {items.map((n) => (
             <button key={n.id} className={`notifItem ${n.read ? "" : "unread"}`} onClick={() => openItem(n)}>
               <b>{n.title}</b>
-              <span>{n.body}</span>
+              {n.lead ? (
+                <span className="notifLead">
+                  <span><b>{n.lead.name}</b>{n.lead.business ? ` • ${n.lead.business}` : ""}</span>
+                  <span>{n.lead.phone}{n.lead.temperature ? <em className={`badge ${n.lead.temperature === "HOT" ? "bad" : n.lead.temperature === "WARM" ? "warn" : ""}`} style={{ marginLeft: 6 }}>{n.lead.temperature}</em> : null}</span>
+                  <span className="small">{n.lead.source}{n.lead.assignedToName ? ` • ${n.lead.assignedToName}` : " • pool (TAKE LEAD)"}</span>
+                </span>
+              ) : <span>{n.body}</span>}
               <span className="small">{new Date(n.createdAt).toLocaleString()}</span>
+              {n.link?.openLead && <span className="btnSmall notifOpen">Open Lead →</span>}
             </button>
           ))}
         </div>

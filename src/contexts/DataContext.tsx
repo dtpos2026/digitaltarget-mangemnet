@@ -46,6 +46,7 @@ export function useData() {
 // Collections kept live with onSnapshot: chat-like data and leads (the
 // WhatsApp service creates leads in the background).
 const LIVE_COLLECTIONS = ["assignments", "queries", "leads"];
+const LIVE = new Set(LIVE_COLLECTIONS);
 
 function reportWriteError(action: string, col: string, e: unknown) {
   const code = (e as { code?: string })?.code;
@@ -65,8 +66,10 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const scope: ReadScope = useMemo(
     () => ({
       canRead: (col: string) => (COLLECTION_READ[col] || []).some((p) => perms.has(p)),
-      teamId: perms.has("myportal.view") ? roleDoc?.teamId : undefined,
+      teamId: perms.has("myportal.view") || perms.has("leads.own") ? roleDoc?.teamId : undefined,
       ownScoped: OWN_SCOPED,
+      leadsOwn: perms.has("leads.own"),
+      portal: perms.has("myportal.view"),
     }),
     [perms, roleDoc?.teamId]
   );
@@ -164,7 +167,9 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       reportWriteError("update", col, e);
       throw e;
     }
-    setData((prev) => ({ ...prev, [col]: ((prev as any)[col] || []).map((x: any) => (x.id === item.id ? item : x)) }));
+    // Only if nothing newer arrived meanwhile: live collections (leads…) already show the write
+    // through their snapshot, and putting this older copy back would undo a later change.
+    setData((prev) => ({ ...prev, [col]: ((prev as any)[col] || []).map((x: any) => (x.id === item.id && (x === before || !LIVE.has(col)) ? item : x)) }));
     const changes = diffForAudit(before, item);
     if (Object.keys(changes).length) {
       logAudit({ action: "update", collection: col, entityId: item.id, entityLabel: entityLabel(item), changes });

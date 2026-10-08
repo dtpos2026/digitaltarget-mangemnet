@@ -106,8 +106,17 @@
     const remote = ser((key && key.remote) || m.from || "");
     // ack: 1 sent to server, 2 delivered, 3 read (WhatsApp's own receipt).
     // Click-to-WhatsApp (Facebook / Instagram ad) messages carry ad metadata.
-    const ad = !!(m.ctwaContext || m.ctwaAdReferral || m.adContext || (m.contextInfo && m.contextInfo.externalAdReply) || m.isAdMessage);
-    return { id: ser(key), fromMe, type, t: Number(m.t || 0) * 1000, text: String(text).slice(0, 4000), remote, ack: Number(m.ack || 0), ad };
+    const ctx = m.ctwaContext || m.ctwaAdReferral || m.adContext || (m.contextInfo && m.contextInfo.externalAdReply) || null;
+    const ad = !!(ctx || m.isAdMessage);
+    const out = { id: ser(key), fromMe, type, t: Number(m.t || 0) * 1000, text: String(text).slice(0, 4000), remote, ack: Number(m.ack || 0), ad };
+    if (ctx && typeof ctx === "object") {
+      const s = (v) => (v == null ? "" : String(v).slice(0, 300));
+      out.adInfo = {
+        title: s(ctx.title || ctx.headline), body: s(ctx.body || ctx.description), sourceUrl: s(ctx.sourceUrl || ctx.mediaUrl),
+        sourceId: s(ctx.sourceId || ctx.adId), sourceType: s(ctx.sourceType || "ad"), ctwaClid: s(ctx.ctwaClid || ctx.clid),
+      };
+    }
+    return out;
   }
 
   const wpp = {
@@ -128,6 +137,11 @@
     async messages(a) {
       const msgs = await W().chat.getMessages(a.chatId, { count: a.count || 40 });
       return (msgs || []).map(msgInfo).filter((m) => m.type !== "e2e_notification" && m.type !== "notification_template");
+    },
+    async chatInfo(a) {
+      const chat = W().chat.get ? W().chat.get(a.chatId) : null;
+      const found = chat || ((await W().chat.list({ onlyUsers: true })) || []).find((c) => ser(c.id) === a.chatId);
+      return found ? await chatInfo(found) : null;
     },
     async active() {
       const chat = W().chat.getActiveChat();

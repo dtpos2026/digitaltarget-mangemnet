@@ -224,23 +224,45 @@ export async function saveSettings(workspaceUid: string, settings: any) {
  */
 export interface ReadScope {
   canRead: (colName: string) => boolean;
-  /** Linked team record id for My Portal users. */
+  /** Linked team record id for My Portal users / sales assistants. */
   teamId?: string;
   ownScoped: Record<string, string>;
+  /** Sales assistant: leads = own (assignedTo == teamId) + the unassigned pool. */
+  leadsOwn?: boolean;
+  /** My Portal user: the ownScoped collections apply. */
+  portal?: boolean;
+}
+
+/** The two queries a sales assistant may run on leads (rules allow nothing wider). */
+function ownLeadQueries(workspaceUid: string, scope: ReadScope) {
+  if (scope.canRead("leads") || !scope.leadsOwn || !scope.teamId) return null;
+  return [
+    query(userCol(workspaceUid, "leads"), where("assignedTo", "==", scope.teamId)),
+    query(userCol(workspaceUid, "leads"), where("assignedTo", "==", "")),
+  ];
 }
 
 function scopedQuery(workspaceUid: string, colName: string, scope: ReadScope) {
   if (scope.canRead(colName)) return userCol(workspaceUid, colName);
   const field = scope.ownScoped[colName];
-  if (field && scope.teamId) return query(userCol(workspaceUid, colName), where(field, "==", scope.teamId));
+  if (field && scope.teamId && scope.portal !== false) return query(userCol(workspaceUid, colName), where(field, "==", scope.teamId));
   return null;
 }
 
 async function loadCollection(workspaceUid: string, colName: string, scope: ReadScope): Promise<any[]> {
   if (colName === "team" && !scope.canRead("team")) {
-    if (!scope.teamId) return [];
+    if (!scope.teamId || scope.portal === false) return [];
     const own = await getDoc(userDoc(workspaceUid, "team", scope.teamId));
     return own.exists() ? [own.data()] : [];
+  }
+  if (colName === "leads") {
+    const qs = ownLeadQueries(workspaceUid, scope);
+    if (qs) {
+      const parts = await Promise.all(qs.map((q) => getDocs(q)));
+      const byId = new Map<string, any>();
+      parts.forEach((s) => s.docs.forEach((d) => byId.set(d.id, d.data())));
+      return [...byId.values()];
+    }
   }
   const q = scopedQuery(workspaceUid, colName, scope);
   if (!q) return [];
@@ -279,6 +301,22 @@ export function subscribeCollection(
   scope: ReadScope,
   callback: (items: any[]) => void
 ): Unsubscribe {
+  if (colName === "leads") {
+    const qs = ownLeadQueries(workspaceUid, scope);
+    if (qs) {
+      // Own + pool, merged; a lead taken by someone else drops out of the pool live.
+      const parts: any[][] = qs.map(() => []);
+      const ready = qs.map(() => false);
+      const emit = () => {
+        if (!ready.every(Boolean)) return;
+        const byId = new Map<string, any>();
+        parts.forEach((p) => p.forEach((x) => byId.set(x.id, x)));
+        callback([...byId.values()]);
+      };
+      const unsubs = qs.map((q, i) => onSnapshot(q, (snap) => { parts[i] = snap.docs.map((d) => d.data()); ready[i] = true; emit(); }, (err) => console.warn("live leads failed", err)));
+      return () => unsubs.forEach((u) => u());
+    }
+  }
   const q = scopedQuery(workspaceUid, colName, scope);
   if (!q) return () => {};
   return onSnapshot(

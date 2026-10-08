@@ -5,6 +5,9 @@ const InvoicesTab = lazy(() => import("@/components/tabs/InvoicesTab"));
 const AdminHistoryTab = lazy(() => import("@/components/tabs/AdminHistoryTab"));
 import { runDailyAuditPurge } from "@/lib/auditPurge";
 const AiHubTab = lazy(() => import("@/components/AiHubTab"));
+const SalesTab = lazy(() => import("@/components/sales/SalesTab"));
+import AutoCapture from "@/components/sales/AutoCapture";
+import FollowUpWatcher from "@/components/sales/FollowUpWatcher";
 const PerformanceTab = lazy(() => import("@/components/tabs/PerformanceTab"));
 import { useAuth } from "@/contexts/AuthContext";
 import { useData } from "@/contexts/DataContext";
@@ -35,6 +38,7 @@ interface TabDef { id: string; label: string; countKey: string }
 const ALL_TABS: TabDef[] = [
   { id: "dash", label: "Dashboard", countKey: "live" },
   { id: "ai", label: "AI Analysis", countKey: "ai" },
+  { id: "sales", label: "Sales", countKey: "sales" },
   { id: "whatsapp", label: "WhatsApp", countKey: "whatsapp" },
   { id: "leads", label: "Leads", countKey: "leads" },
   { id: "clients", label: "Clients", countKey: "clients" },
@@ -85,6 +89,7 @@ export default function MainApp() {
   const [waFocus, setWaFocus] = useState<string | null>(null);
   const [waPhone, setWaPhone] = useState<{ phone: string; chatId?: string; n: number } | null>(null);
   const [waCampaign, setWaCampaign] = useState<{ ids: string[]; n: number } | null>(null);
+  const [salesOpen, setSalesOpen] = useState<{ id: string; n: number } | null>(null);
   useEffect(
     () => onNavigate((d) => {
       if (!TABS.find((t) => t.id === d.tab)) return;
@@ -92,6 +97,7 @@ export default function MainApp() {
       if (d.tab === "whatsapp" && d.conversationId) setWaFocus(d.conversationId);
       if (d.tab === "whatsapp" && (d.phone || d.chatId)) setWaPhone({ phone: d.phone || "", chatId: d.chatId, n: Date.now() });
       if (d.tab === "whatsapp" && d.view === "campaign") setWaCampaign({ ids: d.leadIds || [], n: Date.now() });
+      if (d.tab === "sales" && (d.openLead || d.leadId)) setSalesOpen({ id: (d.openLead || d.leadId)!, n: Date.now() });
     }),
     [TABS]
   );
@@ -120,6 +126,7 @@ export default function MainApp() {
       case "leads": return data.leads.length;
       case "budget": return null;
       case "queries": return data.queries.filter((q: any) => (q.status || "Open") === "Open").length || data.queries.length;
+      case "sales": return data.leads.filter((l: any) => !l.assignedTo && !["Converted", "Lost", "Invalid"].includes(l.status) && l.channel).length || null;
       case "ai":
       case "settings":
       case "history":
@@ -164,6 +171,7 @@ export default function MainApp() {
       case "schedule": return <ScheduleTab />;
       case "history": return <AdminHistoryTab />;
       case "ai": return <AiHubTab />;
+      case "sales": return <SalesTab openLead={salesOpen} />;
       case "reports": return <ReportsTab />;
       case "leads": return <LeadsTab />;
       case "budget": return <BudgetTab />;
@@ -179,6 +187,8 @@ export default function MainApp() {
       <Sidebar tabs={TABS} activeTab={activeTab} onTabChange={setActiveTab} getCount={getCount} open={navOpen} onClose={() => setNavOpen(false)} />
       <div className="appMain">
         <Topbar onToggleTheme={toggleTheme} dark={darkMode} title={ALL_TABS.find((t) => t.id === activeTab)?.label || ""} onMenu={() => setNavOpen(true)} />
+        <AutoCapture />
+        <FollowUpWatcher />
         <main className="grid appContent"><Suspense fallback={<div className="small">Loading…</div>}>{renderTab()}</Suspense></main>
       </div>
     </div>

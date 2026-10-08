@@ -7,9 +7,15 @@ import { withHistory } from "./leadHistory";
 
 // Pipeline order; a capture only moves a lead forward (or to Lost / Converted).
 const ORDER = ["New", "Contacted", "Interested", "Follow-up", "Qualified", "Proposal", "Negotiation", "Converted"];
-export const shouldMoveStatus = (from: string, to: string) =>
-  from !== to && !["Converted", "Lost", "Invalid"].includes(from) &&
-  (to === "Lost" || to === "Converted" || ORDER.indexOf(to) > ORDER.indexOf(from));
+// Statuses a person sets in the sales flow (assigned, taken, demo, quotation …):
+// automatic capture / AI never moves a lead out of them.
+const HUMAN = new Set(["Assigned", "Assistant Handling", "Hot", "Warm", "Cold", "Demo Scheduled", "Demo Given", "Meeting Scheduled", "Proposal", "Negotiation"]);
+export const shouldMoveStatus = (from: string, to: string) => {
+  const f = from === "AI Handling" ? "New" : from;
+  if (f === to || ["Converted", "Lost", "Invalid"].includes(f) || HUMAN.has(f)) return false;
+  if (ORDER.indexOf(f) < 0) return false; // unknown status: leave it to a person
+  return to === "Lost" || to === "Converted" || ORDER.indexOf(to) > ORDER.indexOf(f);
+};
 
 export interface CaptureChat {
   key: string; // conversation id (service) or WhatsApp chat id (extension)
