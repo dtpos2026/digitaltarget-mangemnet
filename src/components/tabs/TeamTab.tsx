@@ -3,6 +3,9 @@ import { useData } from "@/contexts/DataContext";
 import { uid, todayISO, fmtMoney, humanDuration, fileToBase64 } from "@/lib/db";
 import { printElementHTML } from "@/lib/exportUtils";
 import ModuleInsights from "@/components/ModuleInsights";
+import SalesMemberProfile from "@/components/sales/SalesMemberProfile";
+import { useAuth } from "@/contexts/AuthContext";
+import { salesSettingsOf } from "@/lib/salesPipeline";
 
 function getCertificateTypeLabel(v: string) {
   const map: Record<string, string> = {
@@ -23,6 +26,11 @@ function calcMemberAverageRating(memberId: string, teamLogs: any[]) {
 
 export default function TeamTab() {
   const { data, addItem, removeItem, updateItem } = useData();
+  const { can } = useAuth();
+  // Sales profile (leads, chats, activities, sales, target, schedule) of one member.
+  const [salesOf, setSalesOf] = useState("");
+  const salesTeam = new Set(salesSettingsOf(data.settings).assistants.map((a) => a.teamId));
+  const sellsOrHasLeads = (id: string) => salesTeam.has(id) || data.leads.some((l: any) => l.assignedTo === id);
   const [name, setName] = useState("");
   const [role, setRole] = useState("");
   const [tStatus, setTStatus] = useState("Active");
@@ -389,6 +397,7 @@ export default function TeamTab() {
                       <td>{r2 || 0} / 5</td>
                       <td className="rowActions">
                         <button className="btnSmall" onClick={() => selectProfile(t.id)}>Open</button>
+                        {can("leads.view") && sellsOrHasLeads(t.id) && <button className="btnSmall" onClick={() => setSalesOf(t.id)}>📊 Sales</button>}
                         <button className="btnSmall" onClick={() => editTeam(t)}>Edit</button>
                         <button className="btnSmall" onClick={() => { if (confirm("Delete?")) removeItem("team", t.id); }}>Delete</button>
                       </td>
@@ -561,6 +570,7 @@ export default function TeamTab() {
         </div>
       </div>
     </section>
+    {salesOf && <SalesMemberProfile teamId={salesOf} onClose={() => setSalesOf("")} />}
     </>
   );
 }

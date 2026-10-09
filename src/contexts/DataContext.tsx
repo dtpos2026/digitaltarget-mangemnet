@@ -12,13 +12,14 @@ import {
   saveItem,
   deleteItem,
   saveSettings,
+  migrateInlineCosts,
   incrementWallet,
   uid,
   ALL_COLLECTIONS,
   subscribeCollection,
   writeAudit,
 } from "@/lib/db";
-import { COLLECTION_READ, OWN_SCOPED } from "@/lib/permissions";
+import { COLLECTION_READ, OWN_SCOPED, SALES_OWN_SCOPED } from "@/lib/permissions";
 
 interface DataContextType {
   data: AppData;
@@ -45,7 +46,7 @@ export function useData() {
 
 // Collections kept live with onSnapshot: chat-like data and leads (the
 // WhatsApp service creates leads in the background).
-const LIVE_COLLECTIONS = ["assignments", "queries", "leads"];
+const LIVE_COLLECTIONS = ["assignments", "queries", "leads", "products", "quotations", "schedule", "salesTargets", "team"];
 const LIVE = new Set(LIVE_COLLECTIONS);
 
 function reportWriteError(action: string, col: string, e: unknown) {
@@ -66,9 +67,11 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const scope: ReadScope = useMemo(
     () => ({
       canRead: (col: string) => (COLLECTION_READ[col] || []).some((p) => perms.has(p)),
-      teamId: perms.has("myportal.view") || perms.has("leads.own") ? roleDoc?.teamId : undefined,
+      teamId: perms.has("myportal.view") || perms.has("leads.own") || perms.has("schedule.own") ? roleDoc?.teamId : undefined,
       ownScoped: OWN_SCOPED,
+      salesOwnScoped: SALES_OWN_SCOPED,
       leadsOwn: perms.has("leads.own"),
+      scheduleOwn: perms.has("schedule.own"),
       portal: perms.has("myportal.view"),
     }),
     [perms, roleDoc?.teamId]
@@ -101,6 +104,14 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     );
     return () => unsubs.forEach((u) => u());
   }, [workspaceUid, scope]);
+
+  // Cost prices saved inside the settings doc (older versions) move to the admin-only cost doc, once.
+  const costsMigrated = useRef(false);
+  useEffect(() => {
+    if (!workspaceUid || loading || costsMigrated.current || !perms.has("settings.manage")) return;
+    costsMigrated.current = true;
+    migrateInlineCosts(workspaceUid, dataRef.current.settings).catch((e) => console.warn("cost migration", e));
+  }, [workspaceUid, loading, perms]);
 
   // Company details / logo for the letterhead on every printed / exported report.
   useEffect(() => setReportBranding(data.settings), [data.settings]);
@@ -179,7 +190,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const updateSettings = async (settings: any) => {
     if (!workspaceUid) return;
     try {
-      await saveSettings(workspaceUid, settings);
+      await saveSettings(workspaceUid, settings, scope.canRead("serviceCosts"));
     } catch (e) {
       reportWriteError("update", "settings", e);
       throw e;
@@ -192,7 +203,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     if (!workspaceUid) return;
     if (jsonData.settings) {
       const mergedSettings = { ...defaultData.settings, ...jsonData.settings };
-      await saveSettings(workspaceUid, mergedSettings);
+      await saveSettings(workspaceUid, mergedSettings, scope.canRead("serviceCosts"));
     }
     let count = 0;
     for (const col of ALL_COLLECTIONS) {

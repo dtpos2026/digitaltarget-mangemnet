@@ -6,8 +6,9 @@ import { db } from "./firebase";
 import { InboundConversation, IngestPlan, pickCaptureFields, planIngest, IngestContext, mergeChat } from "./leadIngest";
 import { findLeadForChat } from "./leadCapture";
 import { normalizePhone, formatLocalPhone } from "./phone";
+import { formatQuoteNumber } from "./quotation";
 import {
-  SalesAssistant, SalesSettings, activeAssistants, assignedLead, nextRoundRobin, statusLabel, takeBlocker, takenLead, temperatureOf,
+  SalesAssistant, SalesSettings, activeAssistants, assistantsForUnit, assignedLead, nextRoundRobin, statusLabel, takeBlocker, takenLead, temperatureOf,
 } from "./salesPipeline";
 
 const leadRef = (ws: string, id: string) => doc(db, "users", ws, "leads", id);
@@ -122,7 +123,7 @@ export async function ingestConversation(
   // 3) new lead: assignment first (round-robin), then create-if-absent in one transaction with the phone index.
   let lead = plan.lead;
   if (o.sales.mode === "roundrobin") {
-    const pick = await roundRobinPick(ws, activeAssistants(o.sales)).catch(() => null);
+    const pick = await roundRobinPick(ws, assistantsForUnit(o.sales, lead.unit)).catch(() => null);
     if (pick) lead = assignedLead(lead, pick, "auto", "roundrobin");
   }
   const created = await runTransaction(db, async (tx) => {
@@ -137,7 +138,7 @@ export async function ingestConversation(
   if (!created.created) return { kind: "updated", leadId: created.id, reason: "Doosre computer ne pehle bana di" };
 
   // 4) notify: the assigned assistant (or every active assistant in pool mode) + CEO / admins.
-  const assistants = activeAssistants(o.sales);
+  const assistants = assistantsForUnit(o.sales, lead.unit);
   const target = lead.assignedTo ? assistants.filter((a) => a.teamId === lead.assignedTo) : o.sales.mode === "pool" ? assistants : [];
   const uids = [...target.map((a) => a.uid || ""), ...(o.sales.notifyUids || [])];
   const time = new Date(lead.createdAt).toLocaleTimeString("en-PK", { hour: "2-digit", minute: "2-digit" });
@@ -199,4 +200,43 @@ export async function mutateLead(ws: string, leadId: string, fn: (l: any) => any
     tx.set(ref, next);
     return { before, next };
   });
+}
+
+/** Next quotation number for this year (QT-2026-0001…): a shared counter in a transaction. */
+export async function nextQuoteNumber(ws: string, now = new Date()): Promise<string> {
+  const ref = doc(db, "users", ws, "salesState", "quoteCounter");
+  const year = now.getFullYear();
+  return runTransaction(db, async (tx) => {
+    const cur = await tx.get(ref);
+    const d = cur.exists() ? cur.data() : null;
+    const n = d && d.year === year ? Number(d.n || 0) + 1 : 1;
+    tx.set(ref, { id: "quoteCounter", year, n, at: now.toISOString() });
+    return formatQuoteNumber(year, n);
+  });
+}
+
+/**
+ * A lead's follow-up / demo also sits in the handling assistant's schedule
+ * (one item per lead and kind, updated when it moves; marked Done when done).
+ */
+export async function syncLeadSchedule(ws: string, lead: any, kind: "followup" | "demo", by: string) {
+  const owner = lead.assignedTo || "";
+  const id = `S-${kind}-${lead.id}-${owner || "pool"}`.replace(/[^\w-]/g, "_");
+  const ref = doc(db, "users", ws, "schedule", id);
+  const done = kind === "followup" ? !!lead.followUpDone || !lead.followUpDate : !lead.demoAt;
+  const [date, time] = kind === "followup" ? [lead.followUpDate || "", lead.followUpTime || ""] : String(lead.demoAt || "").split("T");
+  try {
+    if (done) {
+      const cur = await getDoc(ref);
+      if (cur.exists()) await updateDoc(ref, { status: "Done", doneAt: new Date().toISOString(), assignedTo: owner });
+      return;
+    }
+    await setDoc(ref, {
+      id, leadId: lead.id, assignedTo: owner, date: date || "", time: (time || "").slice(0, 5),
+      category: kind === "demo" ? "Meeting" : "Follow-up", priority: kind === "demo" ? "High" : "Medium", status: "Pending",
+      task: `${kind === "demo" ? "Demo" : "Follow-up"} — ${lead.name}${lead.businessName || lead.business ? ` (${lead.businessName || lead.business})` : ""}`,
+      notes: kind === "followup" ? lead.followUpNote || "" : "", clientId: "", projectId: "", payFollow: "", location: "",
+      source: "lead", createdBy: by, updatedAt: new Date().toISOString(),
+    });
+  } catch { /* the lead change is saved; the calendar entry is a convenience */ }
 }

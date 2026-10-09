@@ -49,8 +49,9 @@ export const TAB_PERMISSIONS: Record<string, Permission[]> = {
   dash: ["dashboard.view"],
   ai: ["dashboard.view", "reports.view", "finance.view", "leads.view", "schedule.view"],
   whatsapp: ["whatsapp.view"],
-  leads: ["leads.view", "leads.own"],
+  leads: ["leads.view"],
   sales: ["leads.view", "leads.own"],
+  products: ["products.view", "products.manage"],
   clients: ["clients.view"],
   projects: ["projects.view"],
   assignments: ["assignments.manage"],
@@ -59,7 +60,7 @@ export const TAB_PERMISSIONS: Record<string, Permission[]> = {
   khata: ["finance.view"],
   accounts: ["finance.view"],
   team: ["team.view"],
-  schedule: ["schedule.view"],
+  schedule: ["schedule.view", "schedule.own"],
   reports: ["reports.view"],
   performance: ["performance.view"],
   budget: ["finance.view"],
@@ -82,3 +83,6 @@ export const COLLECTION_WRITE = presetData.collectionWrite as Record<string, Per
  * field (value here) equals their linked team record id (roleDoc.teamId).
  */
 export const OWN_SCOPED = presetData.ownScoped as Record<string, string>;
+
+/** Sales assistant: collections limited to their own documents (field = their team id). */
+export const SALES_OWN_SCOPED = presetData.salesOwnScoped as Record<string, string>;

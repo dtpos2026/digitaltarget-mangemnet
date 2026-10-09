@@ -34,19 +34,19 @@ service cloud.firestore {
 
     // GENERATED:BEGIN
     function superRoles() { return ["super_admin", "admin"]; }
-    function allPermissions() { return ["dashboard.view", "leads.view", "leads.create", "leads.edit", "leads.delete", "leads.assign", "leads.own", "leads.take", "whatsapp.view", "whatsapp.reply", "whatsapp.manage", "campaigns.manage", "clients.view", "clients.manage", "projects.view", "projects.manage", "assignments.manage", "schedule.view", "schedule.manage", "queries.manage", "myportal.view", "invoices.view", "invoices.manage", "finance.view", "finance.manage", "reports.view", "performance.view", "team.view", "team.manage", "users.manage", "settings.manage", "audit.view", "data.manage", "history.manage"]; }
+    function allPermissions() { return ["dashboard.view", "leads.view", "leads.create", "leads.edit", "leads.delete", "leads.assign", "leads.own", "leads.take", "products.view", "products.manage", "whatsapp.view", "whatsapp.reply", "whatsapp.manage", "campaigns.manage", "clients.view", "clients.manage", "projects.view", "projects.manage", "assignments.manage", "schedule.view", "schedule.manage", "schedule.own", "queries.manage", "myportal.view", "invoices.view", "invoices.manage", "finance.view", "finance.manage", "reports.view", "performance.view", "team.view", "team.manage", "users.manage", "settings.manage", "audit.view", "data.manage", "history.manage"]; }
     function presets() { return {
-      "manager": ["dashboard.view", "leads.view", "leads.create", "leads.edit", "leads.delete", "leads.assign", "whatsapp.view", "whatsapp.reply", "whatsapp.manage", "clients.view", "clients.manage", "projects.view", "projects.manage", "assignments.manage", "schedule.view", "schedule.manage", "queries.manage", "myportal.view", "invoices.view", "invoices.manage", "finance.view", "finance.manage", "reports.view", "team.view", "team.manage", "settings.manage", "data.manage", "performance.view", "campaigns.manage", "leads.take"],
-      "lead_manager": ["leads.view", "leads.create", "leads.edit", "leads.delete", "leads.assign", "whatsapp.view", "whatsapp.reply", "schedule.view", "schedule.manage", "queries.manage", "performance.view", "campaigns.manage", "leads.take"],
-      "sales_support": ["leads.view", "leads.create", "leads.edit", "whatsapp.view", "whatsapp.reply", "clients.view", "schedule.view", "schedule.manage"],
+      "manager": ["dashboard.view", "leads.view", "leads.create", "leads.edit", "leads.delete", "leads.assign", "whatsapp.view", "whatsapp.reply", "whatsapp.manage", "clients.view", "clients.manage", "projects.view", "projects.manage", "assignments.manage", "schedule.view", "schedule.manage", "queries.manage", "myportal.view", "invoices.view", "invoices.manage", "finance.view", "finance.manage", "reports.view", "team.view", "team.manage", "settings.manage", "data.manage", "performance.view", "campaigns.manage", "leads.take", "products.view", "products.manage"],
+      "lead_manager": ["leads.view", "leads.create", "leads.edit", "leads.delete", "leads.assign", "whatsapp.view", "whatsapp.reply", "schedule.view", "schedule.manage", "queries.manage", "performance.view", "campaigns.manage", "leads.take", "products.view"],
+      "sales_support": ["leads.view", "leads.create", "leads.edit", "whatsapp.view", "whatsapp.reply", "clients.view", "schedule.view", "schedule.manage", "products.view"],
       "accountant": ["dashboard.view", "invoices.view", "invoices.manage", "finance.view", "finance.manage", "reports.view"],
-      "social_media_manager": ["leads.view", "whatsapp.view", "whatsapp.reply", "clients.view", "projects.view", "schedule.view", "myportal.view"],
+      "social_media_manager": ["leads.view", "whatsapp.view", "whatsapp.reply", "clients.view", "projects.view", "schedule.view", "myportal.view", "products.view"],
       "graphic_designer": ["myportal.view"],
       "video_editor": ["myportal.view"],
-      "assistant": ["leads.view", "leads.create", "leads.edit", "schedule.view", "schedule.manage"],
+      "assistant": ["leads.view", "leads.create", "leads.edit", "schedule.view", "schedule.manage", "products.view"],
       "team_member": ["myportal.view"],
       "custom": [],
-      "sales_assistant": ["leads.own", "leads.take", "schedule.view", "schedule.manage"]
+      "sales_assistant": ["leads.own", "leads.take", "products.view", "schedule.own"]
     }; }
     function readPerms(col) { return {
       "clients": ["clients.view", "leads.view", "invoices.view", "finance.view", "projects.view", "schedule.view"],
@@ -71,7 +71,11 @@ service cloud.firestore {
       "waCampaigns": ["campaigns.manage"],
       "waDailyCounts": ["campaigns.manage"],
       "optOuts": ["campaigns.manage", "leads.view", "whatsapp.view"],
-      "salesState": ["leads.view", "leads.own"]
+      "salesState": ["leads.view", "leads.own"],
+      "products": ["products.view", "products.manage", "settings.manage"],
+      "quotations": ["leads.view"],
+      "salesTargets": ["leads.view", "team.view"],
+      "serviceCosts": ["finance.view", "invoices.view", "invoices.manage", "settings.manage"]
     }.get(col, []); }
     function writePerms(col) { return {
       "clients": ["clients.manage", "leads.edit"],
@@ -94,7 +98,11 @@ service cloud.firestore {
       "waCampaigns": ["campaigns.manage"],
       "waDailyCounts": ["campaigns.manage"],
       "optOuts": ["campaigns.manage", "leads.edit", "whatsapp.reply"],
-      "salesState": ["leads.create", "leads.own"]
+      "salesState": ["leads.create", "leads.own"],
+      "products": ["products.manage", "settings.manage"],
+      "quotations": ["leads.edit"],
+      "salesTargets": ["team.manage", "settings.manage", "leads.assign"],
+      "serviceCosts": ["settings.manage"]
     }.get(col, []); }
     // GENERATED:END
 
@@ -138,11 +146,18 @@ service cloud.firestore {
 
     // Generic business collections; access comes from the generated maps.
     // Collections missing from the maps are denied here (default deny).
-    function ownRead(col, id) {
-      return canPortal() && (
-        (col in ['assignments', 'queries', 'teamLogs', 'payouts'] && resource.data.memberId == myTeamId()) ||
-        (col == 'schedule' && resource.data.assignedTo == myTeamId()) ||
-        (col == 'team' && id == myTeamId())
+    // p = permsOf(me()), team = myTeamId(): worked out once by the caller.
+    function ownRead(col, id, p, team) {
+      return team != '' && (
+        // My Portal (production team): own assignments, queries, logs, payouts, schedule
+        (p.hasAny(['myportal.view']) && (
+          (col in ['assignments', 'queries', 'teamLogs', 'payouts'] && resource.data.memberId == team) ||
+          (col == 'schedule' && resource.data.assignedTo == team))) ||
+        // Sales assistant: own schedule, own quotations, own targets
+        (p.hasAny(['schedule.own']) && col == 'schedule' && resource.data.assignedTo == team) ||
+        (p.hasAny(['leads.own']) && col in ['quotations', 'salesTargets'] && resource.data.teamId == team) ||
+        // both: only their own team record
+        (p.hasAny(['myportal.view', 'leads.own', 'schedule.own']) && col == 'team' && id == team)
       );
     }
 
@@ -155,7 +170,7 @@ service cloud.firestore {
     function deleteProtected(col) { return col in ['clients', 'monthlyArchives']; }
 
     match /users/{ws}/{col}/{id} {
-      allow read: if member(ws) && (canAny(readPerms(col)) || ownRead(col, id));
+      allow read: if member(ws) && (canAny(readPerms(col)) || ownRead(col, id, permsOf(me()), myTeamId()));
       allow create: if member(ws) && canAny(writePerms(col));
       allow update: if member(ws) && canAny(writePerms(col)) && (!archived() || isHistorian());
       // The administrator may delete protected / archived records, but only in
@@ -200,6 +215,32 @@ service cloud.firestore {
       allow create: if member(ws) && (canAny(['leads.create']) || (canAny(['leads.own']) && myTeamId() != ''));
       allow update: if member(ws) && leadUpdate(permsOf(me()), myTeamId());
       allow delete: if member(ws) && canAny(['leads.delete']);
+    }
+
+    // Sales assistants (schedule.own): their own schedule items only — always assigned to themselves.
+    function ownSchedule(p, team) { return p.hasAny(['schedule.own']) && team != ''; }
+    match /users/{ws}/schedule/{id} {
+      allow create: if member(ws) && ownSchedule(permsOf(me()), myTeamId())
+        && request.resource.data.assignedTo == myTeamId();
+      allow update: if member(ws) && ownSchedule(permsOf(me()), myTeamId())
+        && resource.data.assignedTo == myTeamId() && request.resource.data.assignedTo == myTeamId() && !archived();
+      allow delete: if member(ws) && ownSchedule(permsOf(me()), myTeamId())
+        && resource.data.assignedTo == myTeamId() && !archived();
+    }
+
+    // Quotation / sales cards: an assistant creates and updates only their own (teamId).
+    function ownSales(p, team) { return p.hasAny(['leads.own']) && team != ''; }
+    match /users/{ws}/quotations/{id} {
+      allow create: if member(ws) && ownSales(permsOf(me()), myTeamId())
+        && request.resource.data.teamId == myTeamId();
+      allow update: if member(ws) && ownSales(permsOf(me()), myTeamId())
+        && resource.data.teamId == myTeamId() && request.resource.data.teamId == myTeamId();
+    }
+
+    // Own sales profile on the team record (shown on quotation cards) — never pay / rate fields.
+    match /users/{ws}/team/{id} {
+      allow update: if member(ws) && ownSales(permsOf(me()), myTeamId()) && id == myTeamId()
+        && changed().hasOnly(['phone', 'whatsapp', 'email', 'designation', 'photo', 'updatedAt']);
     }
 
     // My Portal: team members update status / chat on their own assignments…

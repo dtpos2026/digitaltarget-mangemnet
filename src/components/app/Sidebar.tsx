@@ -1,7 +1,7 @@
 import React from "react";
 import {
   BarChart3, BookOpen, Briefcase, CalendarDays, ClipboardList, FileText, Gauge, HelpCircle, LogOut,
-  MessageCircle, Settings, Archive, Target, User, Users, UsersRound, Wallet, Receipt, Activity, TrendingUp, Sparkles, Inbox, type LucideIcon,
+  MessageCircle, Settings, Archive, Target, User, Users, UsersRound, Wallet, Receipt, Activity, TrendingUp, Sparkles, Inbox, Package, type LucideIcon,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { roleLabel } from "@/lib/permissions";
@@ -14,7 +14,7 @@ export interface Tab {
 }
 
 const ICONS: Record<string, LucideIcon> = {
-  dash: Gauge, ai: Sparkles, sales: Inbox, myportal: User, whatsapp: MessageCircle, leads: Target, clients: UsersRound, performance: Activity,
+  dash: Gauge, ai: Sparkles, sales: Inbox, products: Package, myportal: User, whatsapp: MessageCircle, leads: Target, clients: UsersRound, performance: Activity,
   projects: Briefcase, assignments: ClipboardList, schedule: CalendarDays, queries: HelpCircle, team: Users,
   invoices: Receipt, accounting: BookOpen, khata: FileText, accounts: Wallet, budget: TrendingUp, reports: BarChart3,
   settings: Settings, history: Archive,
@@ -23,7 +23,7 @@ const ICONS: Record<string, LucideIcon> = {
 /** Sidebar sections (tabs the user cannot access are simply not listed). */
 export const NAV_GROUPS: { title: string; ids: string[] }[] = [
   { title: "Overview", ids: ["dash", "ai", "myportal"] },
-  { title: "CRM & Marketing", ids: ["sales", "whatsapp", "leads", "clients", "performance"] },
+  { title: "CRM & Marketing", ids: ["sales", "products", "whatsapp", "leads", "clients", "performance"] },
   { title: "Work", ids: ["projects", "assignments", "schedule", "queries", "team"] },
   { title: "Finance", ids: ["invoices", "accounting", "khata", "accounts", "budget", "reports"] },
   { title: "Administration", ids: ["settings", "history"] },

@@ -5,6 +5,8 @@ import { RoleDoc, useAuth } from "@/contexts/AuthContext";
 import { useData } from "@/contexts/DataContext";
 import { effectivePermissions, roleLabel } from "@/lib/permissions";
 import { SalesAssistant, SalesSettings as SS, salesSettingsOf } from "@/lib/salesPipeline";
+import { BusinessUnit, DEFAULT_BUSINESSES } from "@/lib/business";
+import { categoriesOf } from "@/lib/catalog";
 
 /**
  * Sales team & lead assignment (CEO / admin): which logins are sales
@@ -17,7 +19,16 @@ export default function SalesSettings() {
   const [users, setUsers] = useState<RoleDoc[]>([]);
   const [s, setS] = useState<SS>(() => salesSettingsOf(data.settings));
   const [msg, setMsg] = useState("");
-  useEffect(() => setS(salesSettingsOf(data.settings)), [data.settings]);
+  // Business units: the raw list (inactive ones too) so they can be switched back on.
+  const unitsOf = () => (Array.isArray(data.settings?.businesses) && data.settings.businesses.length ? data.settings.businesses : DEFAULT_BUSINESSES) as BusinessUnit[];
+  const [units, setUnits] = useState<BusinessUnit[]>(unitsOf);
+  useEffect(() => { setS(salesSettingsOf(data.settings)); setUnits(unitsOf()); }, [data.settings]); // eslint-disable-line react-hooks/exhaustive-deps
+  const categories = categoriesOf(data.settings);
+  const patchUnit = (i: number, p: Partial<BusinessUnit>) => setUnits(units.map((u, j) => (j === i ? { ...u, ...p } : u)));
+  const addUnit = () => setUnits([...units, { id: `biz-${Date.now().toString(36)}`, name: "Naya business", icon: "🏢", color: "#0f766e", categories: [], active: true }]);
+  // A category belongs to one business only.
+  const toggleCategory = (i: number, cat: string, on: boolean) =>
+    setUnits(units.map((u, j) => (j === i ? { ...u, categories: on ? [...new Set([...u.categories, cat])] : u.categories.filter((c) => c !== cat) } : { ...u, categories: on ? u.categories.filter((c) => c !== cat) : u.categories })));
   useEffect(() => {
     if (!workspaceUid || !can("users.manage")) return;
     getDocs(query(collection(db, "roles"), where("workspaceUid", "==", workspaceUid)))
@@ -35,8 +46,12 @@ export default function SalesSettings() {
     setS({ ...s, assistants: on ? [...rest, entry] : rest });
   };
   const toggleNotify = (uid: string, on: boolean) => setS({ ...s, notifyUids: on ? [...new Set([...s.notifyUids, uid])] : s.notifyUids.filter((x) => x !== uid) });
+  const toggleUnit = (teamId: string, unitId: string, on: boolean) => setS({
+    ...s, assistants: s.assistants.map((a) => (a.teamId !== teamId ? a : { ...a, units: on ? [...new Set([...(a.units || []), unitId])] : (a.units || []).filter((x) => x !== unitId) })),
+  });
   const save = async () => {
-    try { await updateSettings({ ...data.settings, sales: s }); setMsg("✓ Save ho gaya"); }
+    if (units.some((u) => !u.name.trim())) { setMsg("Har business ka naam likhein"); return; }
+    try { await updateSettings({ ...data.settings, sales: s, businesses: units.map((u) => ({ ...u, name: u.name.trim() })) }); setMsg("✓ Save ho gaya"); }
     catch (e) { setMsg("Save nahi hua: " + (e as Error).message); }
   };
 
@@ -63,20 +78,55 @@ export default function SalesSettings() {
       ) : (
         <div className="tablewrap">
           <table>
-            <thead><tr><th>Assistant</th><th>Role</th><th>Team member</th><th>Leads milein</th></tr></thead>
+            <thead><tr><th>Assistant</th><th>Role</th><th>Team member</th><th>Leads milein</th><th>Business (khali = sab)</th></tr></thead>
             <tbody>
-              {candidates.map((u) => (
-                <tr key={u.uid}>
-                  <td><b>{u.displayName || u.email}</b><div className="small">{u.email}</div></td>
-                  <td>{roleLabel(u.role)}</td>
-                  <td>{teamName(u.teamId) || u.teamId}</td>
-                  <td><input type="checkbox" checked={isAssistant(u)} onChange={(e) => toggleAssistant(u, e.target.checked)} aria-label={`Assistant ${u.email}`} /></td>
-                </tr>
-              ))}
+              {candidates.map((u) => {
+                const a = s.assistants.find((x) => x.teamId === u.teamId);
+                return (
+                  <tr key={u.uid}>
+                    <td><b>{u.displayName || u.email}</b><div className="small">{u.email}</div></td>
+                    <td>{roleLabel(u.role)}</td>
+                    <td>{teamName(u.teamId) || u.teamId}</td>
+                    <td><input type="checkbox" checked={isAssistant(u)} onChange={(e) => toggleAssistant(u, e.target.checked)} aria-label={`Assistant ${u.email}`} /></td>
+                    <td className="small">
+                      {a ? units.filter((x) => x.active !== false).map((x) => (
+                        <label key={x.id} className="permItem" style={{ display: "inline-flex", marginRight: 8 }}>
+                          <input type="checkbox" checked={!!a.units?.includes(x.id)} onChange={(e) => toggleUnit(a.teamId, x.id, e.target.checked)} />
+                          <span>{x.icon} {x.name}</span>
+                        </label>
+                      )) : "—"}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
       )}
+
+      <h3 className="growthH">🏢 Businesses (Multi-business CRM)</h3>
+      <div className="small">Har business ki apni products, leads, assistants aur numbers. Catalog ki category jis business mein ho, us ki leads usi business mein jati hain.</div>
+      <div className="bizEditor">
+        {units.map((u, i) => (
+          <div key={u.id} className={`bizRow ${u.active === false ? "off" : ""}`}>
+            <div className="bizHead">
+              <input value={u.icon} onChange={(e) => patchUnit(i, { icon: e.target.value.slice(0, 4) })} aria-label="Icon" className="bizIcon" />
+              <input value={u.name} onChange={(e) => patchUnit(i, { name: e.target.value })} aria-label="Business name" />
+              <input type="color" value={u.color} onChange={(e) => patchUnit(i, { color: e.target.value })} aria-label="Color" />
+              <label className="permItem"><input type="checkbox" checked={u.active !== false} onChange={(e) => patchUnit(i, { active: e.target.checked })} /><span>Active</span></label>
+            </div>
+            <div className="capLevels">
+              {categories.map((c) => (
+                <label key={c} className="permItem">
+                  <input type="checkbox" checked={u.categories.includes(c)} onChange={(e) => toggleCategory(i, c, e.target.checked)} />
+                  <span>{c}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+        ))}
+        <button className="btnSmall" onClick={addUnit}>+ Naya business</button>
+      </div>
 
       <h3 className="growthH">Har naye lead ki notification (CEO / admin)</h3>
       <div className="capLevels">

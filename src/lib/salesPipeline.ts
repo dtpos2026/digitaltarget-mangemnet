@@ -72,7 +72,11 @@ export function sourceOf(l: any): string {
 }
 
 // ----------------------------------------------------------------- the team
-export interface SalesAssistant { teamId: string; name: string; uid?: string; active: boolean }
+export interface SalesAssistant {
+  teamId: string; name: string; uid?: string; active: boolean;
+  /** Business units this assistant sells for (empty = all). */
+  units?: string[];
+}
 export interface SalesSettings {
   /** pool: everyone is notified, first to TAKE gets it • roundrobin: auto-assign in turn • manual: CEO assigns. */
   mode: "pool" | "roundrobin" | "manual";
@@ -85,6 +89,9 @@ export interface SalesSettings {
 export const DEFAULT_SALES: SalesSettings = { mode: "pool", autoCapture: true, assistants: [], notifyUids: [] };
 export const salesSettingsOf = (settings: any): SalesSettings => ({ ...DEFAULT_SALES, ...(settings?.sales || {}) });
 export const activeAssistants = (s: SalesSettings) => (s.assistants || []).filter((a) => a.active !== false && a.teamId);
+/** Active assistants who sell for this business unit ("" = any). */
+export const assistantsForUnit = (s: SalesSettings, unit?: string) =>
+  activeAssistants(s).filter((a) => !unit || !a.units?.length || a.units.includes(unit));
 
 /** Next assistant after `lastTeamId` (round-robin), or null if there is none. */
 export function nextRoundRobin(list: SalesAssistant[], lastTeamId?: string | null): SalesAssistant | null {

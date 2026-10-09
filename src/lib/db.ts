@@ -1,4 +1,7 @@
 import { db } from "./firebase";
+import { hasInlineCosts, mergeServiceCosts, splitServiceCosts } from "./serviceCosts";
+
+export { hasInlineCosts, mergeServiceCosts, splitServiceCosts };
 import {
   collection,
   doc,
@@ -33,6 +36,12 @@ export interface AppData {
   queries: any[];
   /** Monthly targets, one doc per month ("2026-09"). */
   targets: any[];
+  /** Sales catalog: software / services with logo, price, features, demo. */
+  products: any[];
+  /** Quotation / sales cards sent to customers. */
+  quotations: any[];
+  /** Per-assistant monthly sales targets ("2026-10_T5"). */
+  salesTargets: any[];
 }
 
 export const defaultData: AppData = {
@@ -62,6 +71,9 @@ export const defaultData: AppData = {
   assignments: [],
   queries: [],
   targets: [],
+  products: [],
+  quotations: [],
+  salesTargets: [],
 };
 
 export const ALL_COLLECTIONS = [
@@ -69,6 +81,7 @@ export const ALL_COLLECTIONS = [
   "khata", "wallets", "walletTransfers", "team",
   "teamLogs", "payouts", "schedule", "leads", "budgets",
   "assignments", "queries", "targets",
+  "products", "quotations", "salesTargets",
 ];
 
 export function uid(prefix = "DT") {
@@ -213,9 +226,25 @@ export async function deleteItem(workspaceUid: string, colName: string, docId: s
   await deleteDoc(userDoc(workspaceUid, colName, docId));
 }
 
-export async function saveSettings(workspaceUid: string, settings: any) {
-  await setDoc(doc(db, "users", workspaceUid, "meta", "settings"), settings);
+// Internal cost prices of catalog services are admin data: they live in
+// serviceCosts/catalog (finance / invoice / settings roles only), never in the
+// settings doc every member can read. In memory they are merged back onto
+// settings.services so the catalog, invoices and margin report work as before.
+const costsRef = (workspaceUid: string) => doc(db, "users", workspaceUid, "serviceCosts", "catalog");
+
+/** `withCosts`: the saver can read costs (then the cost doc is rewritten from settings.services). */
+export async function saveSettings(workspaceUid: string, settings: any, withCosts = false) {
+  const { settings: clean, costs } = splitServiceCosts(settings);
+  if (withCosts && Array.isArray(settings?.services)) await setDoc(costsRef(workspaceUid), { id: "catalog", costs, updatedAt: new Date().toISOString() });
+  await setDoc(doc(db, "users", workspaceUid, "meta", "settings"), clean);
 }
+
+/** One-time move: cost prices saved inside the settings doc go to serviceCosts/catalog. */
+export async function migrateInlineCosts(workspaceUid: string, mergedSettings: any) {
+  const raw = await getDoc(doc(db, "users", workspaceUid, "meta", "settings"));
+  if (raw.exists() && hasInlineCosts(raw.data())) await saveSettings(workspaceUid, mergedSettings, true);
+}
+
 
 /**
  * What the signed-in user may load. Collections they cannot read in full are
@@ -227,8 +256,12 @@ export interface ReadScope {
   /** Linked team record id for My Portal users / sales assistants. */
   teamId?: string;
   ownScoped: Record<string, string>;
+  /** Sales assistant: own schedule / quotations / targets, by this field. */
+  salesOwnScoped?: Record<string, string>;
   /** Sales assistant: leads = own (assignedTo == teamId) + the unassigned pool. */
   leadsOwn?: boolean;
+  /** Sales assistant: own schedule only. */
+  scheduleOwn?: boolean;
   /** My Portal user: the ownScoped collections apply. */
   portal?: boolean;
 }
@@ -244,14 +277,17 @@ function ownLeadQueries(workspaceUid: string, scope: ReadScope) {
 
 function scopedQuery(workspaceUid: string, colName: string, scope: ReadScope) {
   if (scope.canRead(colName)) return userCol(workspaceUid, colName);
+  if (!scope.teamId) return null;
   const field = scope.ownScoped[colName];
-  if (field && scope.teamId && scope.portal !== false) return query(userCol(workspaceUid, colName), where(field, "==", scope.teamId));
+  if (field && scope.portal) return query(userCol(workspaceUid, colName), where(field, "==", scope.teamId));
+  const sales = scope.salesOwnScoped?.[colName];
+  if (sales && (colName === "schedule" ? scope.scheduleOwn : scope.leadsOwn)) return query(userCol(workspaceUid, colName), where(sales, "==", scope.teamId));
   return null;
 }
 
 async function loadCollection(workspaceUid: string, colName: string, scope: ReadScope): Promise<any[]> {
   if (colName === "team" && !scope.canRead("team")) {
-    if (!scope.teamId || scope.portal === false) return [];
+    if (!scope.teamId || !(scope.portal || scope.leadsOwn || scope.scheduleOwn)) return [];
     const own = await getDoc(userDoc(workspaceUid, "team", scope.teamId));
     return own.exists() ? [own.data()] : [];
   }
@@ -277,6 +313,12 @@ export async function loadAllData(workspaceUid: string, scope: ReadScope): Promi
     const settingsDoc = await getDoc(doc(db, "users", workspaceUid, "meta", "settings"));
     if (settingsDoc.exists()) {
       data.settings = { ...defaultData.settings, ...settingsDoc.data() };
+    }
+    if (scope.canRead("serviceCosts")) {
+      const c = await getDoc(costsRef(workspaceUid)).catch(() => null);
+      if (c?.exists()) data.settings = mergeServiceCosts(data.settings, c.data().costs);
+    } else {
+      data.settings = splitServiceCosts(data.settings).settings; // never keep costs in memory without access
     }
   } catch (e) {
     console.warn("settings load failed", e);
@@ -316,6 +358,11 @@ export function subscribeCollection(
       const unsubs = qs.map((q, i) => onSnapshot(q, (snap) => { parts[i] = snap.docs.map((d) => d.data()); ready[i] = true; emit(); }, (err) => console.warn("live leads failed", err)));
       return () => unsubs.forEach((u) => u());
     }
+  }
+  if (colName === "team" && !scope.canRead("team")) {
+    // Own team record only (sales profile / My Portal), kept live.
+    if (!scope.teamId || !(scope.portal || scope.leadsOwn || scope.scheduleOwn)) return () => {};
+    return onSnapshot(userDoc(workspaceUid, "team", scope.teamId), (d) => callback(d.exists() ? [d.data()] : []), (err) => console.warn("live team failed", err));
   }
   const q = scopedQuery(workspaceUid, colName, scope);
   if (!q) return () => {};

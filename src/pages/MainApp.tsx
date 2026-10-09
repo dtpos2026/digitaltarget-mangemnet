@@ -6,6 +6,7 @@ const AdminHistoryTab = lazy(() => import("@/components/tabs/AdminHistoryTab"));
 import { runDailyAuditPurge } from "@/lib/auditPurge";
 const AiHubTab = lazy(() => import("@/components/AiHubTab"));
 const SalesTab = lazy(() => import("@/components/sales/SalesTab"));
+const ProductsTab = lazy(() => import("@/components/sales/ProductsTab"));
 import AutoCapture from "@/components/sales/AutoCapture";
 import FollowUpWatcher from "@/components/sales/FollowUpWatcher";
 const PerformanceTab = lazy(() => import("@/components/tabs/PerformanceTab"));
@@ -39,6 +40,7 @@ const ALL_TABS: TabDef[] = [
   { id: "dash", label: "Dashboard", countKey: "live" },
   { id: "ai", label: "AI Analysis", countKey: "ai" },
   { id: "sales", label: "Sales", countKey: "sales" },
+  { id: "products", label: "Products", countKey: "products" },
   { id: "whatsapp", label: "WhatsApp", countKey: "whatsapp" },
   { id: "leads", label: "Leads", countKey: "leads" },
   { id: "clients", label: "Clients", countKey: "clients" },
@@ -60,7 +62,7 @@ const ALL_TABS: TabDef[] = [
 ];
 
 export default function MainApp() {
-  const { can } = useAuth();
+  const { can, isAdmin } = useAuth();
   const { data, loading } = useData();
   const [darkMode, setDarkMode] = useState(() => {
     try { return localStorage.getItem("dt-theme") === "dark"; } catch { return false; }
@@ -79,9 +81,12 @@ export default function MainApp() {
   }, [darkMode]);
 
   // A tab is shown when the user holds any permission listed for it.
+  // My Portal is the production team's own page (tasks, payouts, queries): the
+  // administrator and managers run the business from the other modules, so it
+  // is not shown to them.
   const TABS: TabDef[] = useMemo(
-    () => ALL_TABS.filter((t) => can(TAB_PERMISSIONS[t.id] || [])),
-    [can]
+    () => ALL_TABS.filter((t) => can(TAB_PERMISSIONS[t.id] || []) && (t.id !== "myportal" || (!isAdmin && !can("team.manage")))),
+    [can, isAdmin]
   );
 
   const [activeTab, setActiveTab] = useState<string>(TABS[0]?.id || "dash");
@@ -127,6 +132,7 @@ export default function MainApp() {
       case "budget": return null;
       case "queries": return data.queries.filter((q: any) => (q.status || "Open") === "Open").length || data.queries.length;
       case "sales": return data.leads.filter((l: any) => !l.assignedTo && !["Converted", "Lost", "Invalid"].includes(l.status) && l.channel).length || null;
+      case "products": return (data.products as any[]).filter((p) => p.active !== false).length || null;
       case "ai":
       case "settings":
       case "history":
@@ -172,6 +178,7 @@ export default function MainApp() {
       case "history": return <AdminHistoryTab />;
       case "ai": return <AiHubTab />;
       case "sales": return <SalesTab openLead={salesOpen} />;
+      case "products": return <ProductsTab />;
       case "reports": return <ReportsTab />;
       case "leads": return <LeadsTab />;
       case "budget": return <BudgetTab />;

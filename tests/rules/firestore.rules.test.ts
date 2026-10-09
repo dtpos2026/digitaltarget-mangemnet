@@ -487,3 +487,75 @@ describe("sales assistants: own + pool leads, TAKE LEAD, capture", () => {
     await assertSucceeds(updateDoc(wsDoc("assigner", "leads/O2"), { assignedTo: "T2", assignedToName: "Editor Two", status: "Assigned", takenBy: "", takenAt: "" }));
   });
 });
+
+describe("sales assistants: only their own data outside leads", () => {
+  const seed = async () => {
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      const f = ctx.firestore();
+      const put = (p: string, d: Record<string, unknown>) => setDoc(doc(f, `users/${WS}/${p}`), d);
+      await put("team/T1", { id: "T1", name: "Ayesha", rate: 30000, paid: 0 });
+      await put("team/T2", { id: "T2", name: "Bilal", rate: 35000, paid: 0 });
+      await put("clients/C1", { id: "C1", name: "Client" });
+      await put("projects/PR1", { id: "PR1", title: "Project" });
+      await put("schedule/S1", { id: "S1", task: "My demo", assignedTo: "T1" });
+      await put("schedule/S2", { id: "S2", task: "Bilal's call", assignedTo: "T2" });
+      await put("quotations/Q1", { id: "Q1", teamId: "T1", total: 13000 });
+      await put("quotations/Q2", { id: "Q2", teamId: "T2", total: 60000 });
+      await put("salesTargets/2026-10_T1", { id: "2026-10_T1", teamId: "T1", revenue: 200000 });
+      await put("salesTargets/2026-10_T2", { id: "2026-10_T2", teamId: "T2", revenue: 300000 });
+      await put("products/P1", { id: "P1", name: "DTPOS", price: 10000 });
+      await put("serviceCosts/catalog", { id: "catalog", costs: { "s-pos": 2000 } });
+    });
+  };
+
+  it("no clients, projects, other team records or cost prices", async () => {
+    await seed();
+    await assertFails(getDoc(wsDoc("sa1", "clients/C1")));
+    await assertFails(getDoc(wsDoc("sa1", "projects/PR1")));
+    await assertFails(getDoc(wsDoc("sa1", "team/T2")));
+    await assertFails(getDocs(collection(db("sa1"), `users/${WS}/team`)));
+    await assertFails(getDoc(wsDoc("sa1", "serviceCosts/catalog")));
+    await assertSucceeds(getDoc(wsDoc("admin", "serviceCosts/catalog")));
+    await assertSucceeds(getDoc(wsDoc("sa1", "team/T1")));
+  });
+
+  it("edits only the sales-profile fields of their own team record", async () => {
+    await seed();
+    await assertSucceeds(updateDoc(wsDoc("sa1", "team/T1"), { phone: "03001234567", designation: "Sales Executive", updatedAt: "x" }));
+    await assertFails(updateDoc(wsDoc("sa1", "team/T1"), { rate: 99999 }));
+    await assertFails(updateDoc(wsDoc("sa1", "team/T2"), { phone: "0300" }));
+  });
+
+  it("own schedule only: read, query, add, change; never another's", async () => {
+    await seed();
+    await assertSucceeds(getDoc(wsDoc("sa1", "schedule/S1")));
+    await assertFails(getDoc(wsDoc("sa1", "schedule/S2")));
+    await assertSucceeds(getDocs(query(collection(db("sa1"), `users/${WS}/schedule`), where("assignedTo", "==", "T1"))));
+    await assertFails(getDocs(collection(db("sa1"), `users/${WS}/schedule`)));
+    await assertSucceeds(setDoc(wsDoc("sa1", "schedule/S3"), { id: "S3", task: "Call", assignedTo: "T1" }));
+    await assertFails(setDoc(wsDoc("sa1", "schedule/S4"), { id: "S4", task: "Call", assignedTo: "T2" }));
+    await assertSucceeds(updateDoc(wsDoc("sa1", "schedule/S1"), { status: "Done" }));
+    await assertFails(updateDoc(wsDoc("sa1", "schedule/S1"), { assignedTo: "T2" }));
+    await assertFails(updateDoc(wsDoc("sa1", "schedule/S2"), { status: "Done" }));
+    await assertFails(deleteDoc(wsDoc("sa1", "schedule/S2")));
+    await assertSucceeds(deleteDoc(wsDoc("sa1", "schedule/S3")));
+  });
+
+  it("own quotations and targets; products read-only; admin sees all", async () => {
+    await seed();
+    await assertSucceeds(getDoc(wsDoc("sa1", "quotations/Q1")));
+    await assertFails(getDoc(wsDoc("sa1", "quotations/Q2")));
+    await assertSucceeds(getDocs(query(collection(db("sa1"), `users/${WS}/quotations`), where("teamId", "==", "T1"))));
+    await assertSucceeds(setDoc(wsDoc("sa1", "quotations/Q3"), { id: "Q3", teamId: "T1", total: 5000 }));
+    await assertFails(setDoc(wsDoc("sa1", "quotations/Q4"), { id: "Q4", teamId: "T2", total: 5000 }));
+    await assertFails(updateDoc(wsDoc("sa1", "quotations/Q1"), { teamId: "T2" }));
+    await assertSucceeds(getDoc(wsDoc("sa1", "salesTargets/2026-10_T1")));
+    await assertFails(getDoc(wsDoc("sa1", "salesTargets/2026-10_T2")));
+    await assertFails(setDoc(wsDoc("sa1", "salesTargets/2026-10_T1"), { id: "2026-10_T1", teamId: "T1", revenue: 1 }));
+    await assertSucceeds(getDoc(wsDoc("sa1", "products/P1")));
+    await assertFails(updateDoc(wsDoc("sa1", "products/P1"), { price: 1 }));
+    await assertSucceeds(getDocs(collection(db("admin"), `users/${WS}/quotations`)));
+    await assertSucceeds(setDoc(wsDoc("admin", "salesTargets/2026-10_T2"), { id: "2026-10_T2", teamId: "T2", revenue: 250000 }));
+    await assertSucceeds(updateDoc(wsDoc("admin", "products/P1"), { price: 12000 }));
+  });
+});

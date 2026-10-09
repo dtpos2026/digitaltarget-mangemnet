@@ -41,6 +41,16 @@
       "label": "Take Lead (sales assistant)"
     },
     {
+      "key": "products.view",
+      "group": "Leads",
+      "label": "Products catalog, quotations & sharing"
+    },
+    {
+      "key": "products.manage",
+      "group": "Leads",
+      "label": "Products catalog add / edit"
+    },
+    {
       "key": "whatsapp.view",
       "group": "WhatsApp",
       "label": "WhatsApp Access (read inbox)"
@@ -94,6 +104,11 @@
       "key": "schedule.manage",
       "group": "Team Work",
       "label": "Schedule Create / Edit"
+    },
+    {
+      "key": "schedule.own",
+      "group": "Team Work",
+      "label": "Own schedule only (sales assistant)"
     },
     {
       "key": "queries.manage",
@@ -260,7 +275,9 @@
       "data.manage",
       "performance.view",
       "campaigns.manage",
-      "leads.take"
+      "leads.take",
+      "products.view",
+      "products.manage"
     ],
     "lead_manager": [
       "leads.view",
@@ -275,7 +292,8 @@
       "queries.manage",
       "performance.view",
       "campaigns.manage",
-      "leads.take"
+      "leads.take",
+      "products.view"
     ],
     "sales_support": [
       "leads.view",
@@ -285,7 +303,8 @@
       "whatsapp.reply",
       "clients.view",
       "schedule.view",
-      "schedule.manage"
+      "schedule.manage",
+      "products.view"
     ],
     "accountant": [
       "dashboard.view",
@@ -302,7 +321,8 @@
       "clients.view",
       "projects.view",
       "schedule.view",
-      "myportal.view"
+      "myportal.view",
+      "products.view"
     ],
     "graphic_designer": [
       "myportal.view"
@@ -315,7 +335,8 @@
       "leads.create",
       "leads.edit",
       "schedule.view",
-      "schedule.manage"
+      "schedule.manage",
+      "products.view"
     ],
     "team_member": [
       "myportal.view"
@@ -324,8 +345,8 @@
     "sales_assistant": [
       "leads.own",
       "leads.take",
-      "schedule.view",
-      "schedule.manage"
+      "products.view",
+      "schedule.own"
     ]
   },
   "collectionRead": {
@@ -427,6 +448,24 @@
     "salesState": [
       "leads.view",
       "leads.own"
+    ],
+    "products": [
+      "products.view",
+      "products.manage",
+      "settings.manage"
+    ],
+    "quotations": [
+      "leads.view"
+    ],
+    "salesTargets": [
+      "leads.view",
+      "team.view"
+    ],
+    "serviceCosts": [
+      "finance.view",
+      "invoices.view",
+      "invoices.manage",
+      "settings.manage"
     ]
   },
   "collectionWrite": {
@@ -504,6 +543,21 @@
     "salesState": [
       "leads.create",
       "leads.own"
+    ],
+    "products": [
+      "products.manage",
+      "settings.manage"
+    ],
+    "quotations": [
+      "leads.edit"
+    ],
+    "salesTargets": [
+      "team.manage",
+      "settings.manage",
+      "leads.assign"
+    ],
+    "serviceCosts": [
+      "settings.manage"
     ]
   },
   "ownScoped": {
@@ -512,5 +566,10 @@
     "teamLogs": "memberId",
     "payouts": "memberId",
     "schedule": "assignedTo"
+  },
+  "salesOwnScoped": {
+    "schedule": "assignedTo",
+    "quotations": "teamId",
+    "salesTargets": "teamId"
   }
 }

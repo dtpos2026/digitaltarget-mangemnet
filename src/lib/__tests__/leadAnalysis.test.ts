@@ -15,15 +15,16 @@ describe("conversationOf", () => {
 });
 
 describe("analyzeLead", () => {
-  it("existing captured lead: service, ads type, hot interest, value from budget", () => {
+  it("existing captured lead: service, ads type, hot interest; value = catalog starting price, budget kept apart", () => {
     const lead = { id: "1", name: "Bilal", source: "Facebook Ads", status: "New", date: "2026-09-27", notes: "WhatsApp chat:\nBilal: facebook ads ka package kya hai?\nBilal: price kitni hai? budget 20k hai" };
     const ai = analyzeLead(lead, {}, today);
     expect(ai.line).toBe("Meta Ads (Facebook + Instagram)");
     expect(ai.category).toBe("Digital Marketing");
     expect(ai.leadType).toBe("ads");
     expect(ai.suggestedStatus).toBe("Interested");
-    expect(ai.potentialValue).toBe(20000);
-    expect(ai.valueBasis).toBe("chat budget");
+    expect(ai.potentialValue).toBe(4900); // cheapest Meta Ads package: 7 days × 700 = weekly 4,900
+    expect(ai.valueBasis).toBe("catalog price");
+    expect(ai.budget).toBe(20000);
     expect(ai.level).toBe("Hot");
     expect(ai.followUp.required).toBe(true); // customer's last message is unanswered
     expect(ai.nextAction).toMatch(/jawab/);

@@ -180,6 +180,19 @@ export function firstInvoiceAmount(s: CatalogService): number {
   return s.pricing === "setup_plus_monthly" ? (Number(s.setupFee) || 0) + (Number(s.rate) || 0) : Number(s.rate) || 0;
 }
 
+/**
+ * What a first sale of this service is realistically worth: setup + first month,
+ * a daily rate times its default period (7 days → 7 × rate), else the rate.
+ */
+export function typicalSaleValue(s: CatalogService): number {
+  const rate = Number(s.rate) || 0;
+  if (s.pricing === "daily") {
+    const d = DURATIONS.find((x) => x.id === s.duration) as { days?: number } | undefined;
+    return rate * (d?.days || 7);
+  }
+  return firstInvoiceAmount(s);
+}
+
 /** Money this service brings in every month, 0 for one-time work. */
 export function monthlyValue(s: CatalogService): number {
   if (s.pricing === "recurring" || s.pricing === "setup_plus_monthly") {

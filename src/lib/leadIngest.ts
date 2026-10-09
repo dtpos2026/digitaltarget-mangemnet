@@ -17,6 +17,7 @@ import { assessChat, BlockEntry, DEFAULT_FILTER } from "./captureFilter";
 import { withHistory } from "./leadHistory";
 import { formatLocalPhone, normalizePhone } from "./phone";
 import { temperatureOf } from "./salesPipeline";
+import { unitOfLine } from "./business";
 
 export type Channel = "wa-web-extension" | "wa-cloud-api" | "wa-server" | "manual";
 
@@ -158,6 +159,8 @@ export function planIngest(c: InboundConversation, existing: any | null, ctx: In
   lead.temperature = temperatureOf(lead);
   lead.requirement = lead.ai?.brief?.summary || lead.serviceType || "";
   if (!lead.business && lead.ai?.brief?.business) lead.business = lead.ai.brief.business;
+  const unit = unitOfLine(ctx.settings, lead.serviceType !== "Other" ? lead.serviceType : lead.ai?.line);
+  if (unit) lead.unit = unit;
   return { kind: "create", lead, isAds };
 }
 

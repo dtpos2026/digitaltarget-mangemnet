@@ -10,7 +10,7 @@
 import { ChatLine, classifyChat, linesMentioned } from "./chatClassifier";
 import { LeadBrief, buildBrief, normalizeLines } from "./leadAgent";
 export type { LeadBrief } from "./leadAgent";
-import { activeServicesOf, categoryOfLine, firstInvoiceAmount, linesOf } from "./catalog";
+import { activeServicesOf, categoryOfLine, linesOf, typicalSaleValue } from "./catalog";
 import { shouldMoveStatus } from "./leadCapture";
 import { OPT_OUT_RE } from "./waTemplates";
 import { withHistory } from "./leadHistory";
@@ -38,8 +38,11 @@ export interface LeadAI {
   level: InterestLevel;
   suggestedStatus: string;
   statusReason: string;
+  /** Starting catalog price of the detected service line — never the customer's budget. */
   potentialValue: number;
   valueBasis: "chat budget" | "catalog price" | "none";
+  /** Budget the customer mentioned (information only). */
+  budget?: number;
   followUp: { required: boolean; date: string; reason: string };
   nextAction: string;
   lastMessage: string;
@@ -167,16 +170,14 @@ export function analyzeLead(lead: any, settings: unknown, today = new Date()): L
   // A WhatsApp label the owner put on the chat ("Hot lead") wins over the estimate.
   const level: InterestLevel = labelLevel(lead.waLabels) || (interest >= 70 ? "Hot" : interest >= 40 ? "Warm" : "Cold");
 
-  // Potential value: budget said in the chat, else the catalog price for the line.
+  // Potential value: the starting price of the detected line in the catalog (what a sale
+  // realistically starts at). The customer's budget is kept apart — it is not a price.
   const budget = budgetFromChat(lines);
-  let potentialValue = budget;
-  let valueBasis: LeadAI["valueBasis"] = budget ? "chat budget" : "none";
-  if (!budget && line) {
-    const svc = activeServicesOf(settings).filter((s) => s.line === line);
-    if (svc.length) {
-      potentialValue = Math.round(svc.reduce((s, x) => s + firstInvoiceAmount(x), 0) / svc.length);
-      valueBasis = "catalog price";
-    }
+  let potentialValue = 0;
+  let valueBasis: LeadAI["valueBasis"] = "none";
+  if (line) {
+    const prices = activeServicesOf(settings).filter((s) => s.line === line).map(typicalSaleValue).filter((n) => n > 0);
+    if (prices.length) { potentialValue = Math.min(...prices); valueBasis = "catalog price"; }
   }
 
   // Follow-up.
@@ -223,7 +224,7 @@ export function analyzeLead(lead: any, settings: unknown, today = new Date()): L
 
   return {
     version: 1, analyzedAt: new Date().toISOString(), line, category, leadType,
-    interest, level, suggestedStatus, statusReason: cls.reason, potentialValue, valueBasis,
+    interest, level, suggestedStatus, statusReason: cls.reason, potentialValue, valueBasis, budget,
     followUp: { required, date, reason }, nextAction,
     lastMessage: (rawLines[rawLines.length - 1]?.text || "").slice(0, 200), lastFromMe: !!last?.fromMe, customerMessages: theirs.length, optOut, brief,
   };

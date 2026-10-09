@@ -17,7 +17,11 @@ const TYPE_TO_CATEGORY: Record<ScheduleType, string> = {
 
 export default function ScheduleTab() {
   const { data, addItem, removeItem, updateItem } = useData();
-  const { can, user } = useAuth();
+  const { can, user, roleDoc } = useAuth();
+  // Sales assistant: only their own schedule — everything they add is assigned to them.
+  const ownOnly = !can("schedule.view") && can("schedule.own");
+  const myTeamId = roleDoc?.teamId || "";
+  const teamName = (id?: string) => data.team.find((t: any) => t.id === id)?.name || id || "";
   const g = useGrowthTasks();
   const inlineAI = useInlineAI();
   const [aiText, setAiText] = useState("");
@@ -34,6 +38,7 @@ export default function ScheduleTab() {
   const [priority, setPriority] = useState("Medium");
   const [task, setTask] = useState("");
   const [assignedTo, setAssignedTo] = useState("");
+  const [leadId, setLeadId] = useState("");
   const [payFollow, setPayFollow] = useState("");
   const [time, setTime] = useState("");
   const [location, setLocation] = useState("");
@@ -45,7 +50,7 @@ export default function ScheduleTab() {
     if (!task.trim()) { alert("Task required"); return; }
     const fields = {
       date, category, clientId, projectId, task: task.trim(),
-      status, priority, payFollow: payFollow.trim(), assignedTo: assignedTo.trim(),
+      status, priority, payFollow: payFollow.trim(), assignedTo: ownOnly ? myTeamId : assignedTo.trim(), leadId,
       time, location: location.trim(), notes: notes.trim(),
     };
     if (editId) {
@@ -55,7 +60,7 @@ export default function ScheduleTab() {
     } else {
       await addItem("schedule", { id: uid("S"), ...fields, createdAt: new Date().toISOString(), createdBy: user?.email || "" });
     }
-    setTask(""); setPayFollow(""); setAssignedTo(""); setTime(""); setLocation(""); setNotes("");
+    setTask(""); setPayFollow(""); setAssignedTo(""); setLeadId(""); setTime(""); setLocation(""); setNotes("");
     setPriority("Medium"); setStatus("Pending"); setCategory("Meeting");
   };
 
@@ -68,7 +73,7 @@ export default function ScheduleTab() {
     await addItem("schedule", {
       id: uid("S"), date: sg.date, time: sg.time, category: TYPE_TO_CATEGORY[sg.type], clientId: sg.clientId, leadId: sg.leadId,
       projectId: "", task: sg.task, status: "Pending", priority: sg.priority, notes: sg.notes, reminderAt: sg.reminder,
-      payFollow: "", assignedTo: "", location: "", source: "ai", createdAt: new Date().toISOString(), createdBy: user?.email || "",
+      payFollow: "", assignedTo: ownOnly ? myTeamId : "", location: "", source: "ai", createdAt: new Date().toISOString(), createdBy: user?.email || "",
     });
     setSugg(null); setAiText("");
   };
@@ -82,7 +87,7 @@ export default function ScheduleTab() {
   const editItem = (s: any) => {
     setEditId(s.id); setDate(s.date || todayISO()); setTime(s.time || ""); setCategory(s.category || "Other"); setClientId(s.clientId || "");
     setProjectId(s.projectId || ""); setTask(s.task || ""); setPriority(s.priority || "Medium"); setStatus(s.status || "Pending");
-    setPayFollow(s.payFollow || ""); setAssignedTo(s.assignedTo || ""); setLocation(s.location || ""); setNotes(s.notes || "");
+    setPayFollow(s.payFollow || ""); setAssignedTo(s.assignedTo || ""); setLeadId(s.leadId || ""); setLocation(s.location || ""); setNotes(s.notes || "");
   };
   const setItemStatus = (s: any, next: string) => updateItem("schedule", { ...s, status: next, updatedAt: new Date().toISOString(), ...(next === "Done" ? { doneAt: new Date().toISOString() } : {}) });
   const reschedule = async (s: any) => {
@@ -98,6 +103,7 @@ export default function ScheduleTab() {
     const out: { key: string; title: string; detail: string; sg: ScheduleSuggestion }[] = [];
     const mk = (over: Partial<ScheduleSuggestion>): ScheduleSuggestion => ({ clientId: "", clientName: "", leadId: "", task: "", date: today, time: "", priority: "Medium", type: "Follow-up", notes: "", reminder: new Date(`${today}T10:00:00`).toISOString(), found: [], ...over });
     for (const l of data.leads) {
+      if (ownOnly && l.assignedTo !== myTeamId) continue;
       if (!l.followUpDate || l.followUpDate > today || ["Converted", "Lost", "Invalid"].includes(l.status) || l.optOut || scheduledFor.has(l.id)) continue;
       out.push({ key: `sched:lead:${l.id}`, title: `Follow-up: ${l.name}`, detail: `${l.serviceType || "Lead"} • follow-up ${l.followUpDate}`, sg: mk({ leadId: l.id, task: `Follow-up — ${l.name}${l.serviceType ? ` (${l.serviceType})` : ""}`, priority: l.followUpDate < today ? "High" : "Medium", notes: l.ai?.nextAction || "" }) });
     }
@@ -117,7 +123,7 @@ export default function ScheduleTab() {
       id, date: x.sg.date, time: "", category: TYPE_TO_CATEGORY[x.sg.type], clientId: x.sg.clientId, leadId: x.sg.leadId,
       invoiceId: x.key.startsWith("sched:pay:") || x.key.startsWith("sched:renew:") ? x.key.split(":")[2] : "",
       projectId: "", task: x.sg.task, status: "Pending", priority: x.sg.priority, notes: x.sg.notes, reminderAt: x.sg.reminder,
-      payFollow: "", assignedTo: "", location: "", source: "ai", createdAt: new Date().toISOString(), createdBy: user?.email || "",
+      payFollow: "", assignedTo: ownOnly ? myTeamId : "", location: "", source: "ai", createdAt: new Date().toISOString(), createdBy: user?.email || "",
     });
   };
   const dismissAuto = (x: (typeof autoSuggestions)[number]) =>
@@ -169,7 +175,7 @@ export default function ScheduleTab() {
         <td>${p?.title || ""}</td>
         <td>${s.task || ""}</td>
         <td>${s.payFollow || ""}</td>
-        <td>${s.assignedTo || ""}</td>
+        <td>${teamName(s.assignedTo)}</td>
         <td>${s.priority || "Medium"}</td>
         <td>${s.status || ""}</td>
       </tr>`;
@@ -240,7 +246,7 @@ export default function ScheduleTab() {
         ${c?.name ? `<div><b>Client:</b> ${c.name}</div>` : ""}
         ${p?.title ? `<div><b>Project:</b> ${p.title}</div>` : ""}
         ${s.payFollow ? `<div><b>Payment:</b> ${s.payFollow}</div>` : ""}
-        ${s.assignedTo ? `<div><b>Assigned:</b> ${s.assignedTo}</div>` : ""}
+        ${s.assignedTo ? `<div><b>Assigned:</b> ${teamName(s.assignedTo)}</div>` : ""}
         ${s.location ? `<div><b>Location:</b> ${s.location}</div>` : ""}
         <div><b>Priority:</b> ${s.priority || "Medium"} | <b>Status:</b> ${s.status || "Pending"}</div>
         ${s.notes ? `<div><b>Notes:</b> ${s.notes}</div>` : ""}
@@ -269,7 +275,8 @@ export default function ScheduleTab() {
       <h2>Schedule / Daily Work</h2>
       <div className="small">Meeting, payment collection, project follow-up, calls, reminders aur daily field work ko alag categories mein manage karein. Thermal printer ke liye 58mm aur 80mm PNG/JPG export bhi available hai.</div>
 
-      {inlineAI && can("schedule.manage") && (
+      {ownOnly && <div className="small" style={{ marginTop: 4 }}>👤 Ye sirf <b>aap ka</b> schedule hai — demo, follow-up aur calls jo aap ne ya lead se bane.</div>}
+      {inlineAI && (can("schedule.manage") || ownOnly) && (
         <div className="aiSched">
           <div className="lpHead">✨ AI schedule assistant</div>
           <div className="aiSchedRow">
@@ -325,18 +332,27 @@ export default function ScheduleTab() {
         </div>
       </div>
       <div className="grid3">
-        <div><label>Client</label>
-          <select value={clientId} onChange={(e) => setClientId(e.target.value)}>
-            <option value="">Select...</option>
-            {data.clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-          </select>
-        </div>
-        <div><label>Project (optional)</label>
+        {ownOnly ? (
+          <div><label>Lead (optional)</label>
+            <select value={leadId} onChange={(e) => setLeadId(e.target.value)}>
+              <option value="">Select...</option>
+              {data.leads.filter((l: any) => l.assignedTo === myTeamId).map((l: any) => <option key={l.id} value={l.id}>{l.name}</option>)}
+            </select>
+          </div>
+        ) : (
+          <div><label>Client</label>
+            <select value={clientId} onChange={(e) => setClientId(e.target.value)}>
+              <option value="">Select...</option>
+              {data.clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
+          </div>
+        )}
+        {!ownOnly && <div><label>Project (optional)</label>
           <select value={projectId} onChange={(e) => setProjectId(e.target.value)}>
             <option value="">(Optional)</option>
             {filteredProjects.map(p => <option key={p.id} value={p.id}>{p.title}</option>)}
           </select>
-        </div>
+        </div>}
         <div><label>Priority</label>
           <select value={priority} onChange={(e) => setPriority(e.target.value)}>
             <option>High</option><option>Medium</option><option>Low</option>
@@ -345,7 +361,15 @@ export default function ScheduleTab() {
       </div>
       <div className="grid2">
         <div><label>Title / Main Task</label><input value={task} onChange={(e) => setTask(e.target.value)} placeholder="e.g. Meezan payment collect, Dr Bilal meeting, reel follow-up" /></div>
-        <div><label>Assigned To (optional)</label><input value={assignedTo} onChange={(e) => setAssignedTo(e.target.value)} placeholder="team member / self" /></div>
+        {ownOnly ? <div><label>Assigned To</label><input value={teamName(myTeamId) || "Main"} disabled /></div> : (
+          <div><label>Assigned To (optional)</label>
+            <select value={assignedTo} onChange={(e) => setAssignedTo(e.target.value)}>
+              <option value="">— koi nahi / self —</option>
+              {data.team.map((t: any) => <option key={t.id} value={t.id}>{t.name}{t.role ? ` (${t.role})` : ""}</option>)}
+              {assignedTo && !data.team.some((t: any) => t.id === assignedTo) && <option value={assignedTo}>{assignedTo}</option>}
+            </select>
+          </div>
+        )}
       </div>
       <div className="grid3">
         <div><label>Payment Note (optional)</label><input value={payFollow} onChange={(e) => setPayFollow(e.target.value)} placeholder="e.g. collect 20,000 from client" /></div>
@@ -386,12 +410,12 @@ export default function ScheduleTab() {
                 <tr key={s.id}>
                   <td>{s.date || ""}<div className="small">{s.time || ""}</div></td>
                   <td>{s.category || "Other"}</td>
-                  <td>{c?.name || ""}<div className="small">{p?.title || s.location || ""}</div></td>
+                  <td>{c?.name || data.leads.find((l: any) => l.id === s.leadId)?.name || ""}<div className="small">{p?.title || s.location || ""}</div></td>
                   <td>{s.source === "ai" && <span className="badge pri" title="AI se bana">✨ AI</span>} {s.task || ""}<div className="small">{s.notes || ""}</div>{s.rescheduledFrom && <div className="small">↻ {s.rescheduledFrom} se</div>}</td>
                   <td><span className={`badge ${s.priority === "High" ? "bad" : (s.priority === "Low" ? "ok" : "warn")}`}>{s.priority || "Medium"}</span></td>
                   <td><span className={`badge ${getStatusBadge(s.status)}`}>{s.status}</span></td>
                   <td>{s.payFollow || ""}</td>
-                  <td>{s.assignedTo || "—"}</td>
+                  <td>{teamName(s.assignedTo) || "—"}</td>
                   <td className="rowActions">
                     {s.status !== "Done" && <button className="btnSmall" onClick={() => setItemStatus(s, "Done")} title="Complete">✓ Done</button>}
                     {reschedId === s.id ? (
